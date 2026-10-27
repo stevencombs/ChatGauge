@@ -12,6 +12,8 @@ final class AppActions: ObservableObject {
     var checkForUpdates: () -> Void = {}
     var showAbout: () -> Void = {}
     var closePopover: () -> Void = {}
+    /// The paperclip: shows the image picker (the app decides where; see PopoverPolicy.attachInChatWindow).
+    var attachImages: () -> Void = {}
     var quit: () -> Void = { NSApp.terminate(nil) }
 }
 
@@ -209,13 +211,15 @@ struct ComposerView: View {
     @ObservedObject var engine: ChatEngine
     /// The voice button (added by the voice feature; nil hides it).
     var voice: AnyView? = nil
+    /// Shows the image picker. nil runs a plain modal picker here.
+    var attach: (() -> Void)? = nil
     @FocusState private var focused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             AttachmentChips(engine: engine)
             HStack(alignment: .bottom, spacing: 6) {
-                Button { pickImages() } label: { Image(systemName: "paperclip") }
+                Button { if let attach { attach() } else { pickImages() } } label: { Image(systemName: "paperclip") }
                     .buttonStyle(.borderless).help("Attach an image (or drop or paste one)")
                 TextField(placeholder, text: $engine.draft, axis: .vertical)
                     .textFieldStyle(.plain)

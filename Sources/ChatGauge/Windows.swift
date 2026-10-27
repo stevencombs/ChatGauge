@@ -30,6 +30,9 @@ final class HostedWindow: NSObject, NSWindowDelegate {
             w.title = title
             w.styleMask = resizable ? [.titled, .closable, .miniaturizable, .resizable] : [.titled, .closable, .miniaturizable]
             w.isReleasedWhenClosed = false
+            // A normal window: it stays on screen when you click Finder (never hides on deactivate), so you can drag
+            // files onto it from behind.
+            w.hidesOnDeactivate = false
             w.setContentSize(size)
             if resizable { w.contentMinSize = NSSize(width: 520, height: 420) }
             w.delegate = self

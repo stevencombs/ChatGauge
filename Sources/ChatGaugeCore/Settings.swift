@@ -177,6 +177,10 @@ public struct ChatSettings: Codable, Equatable, Sendable {
     /// nil = by tier (Pro large-v3-turbo, Air base.en).
     public var whisperModel: String? = nil
 
+    // Popover
+    /// Pinned: the popover stays open when you click another app (Finder), so you can drag images into it.
+    public var pinPopover: Bool = false
+
     public var modifiedAt: Date = Date(timeIntervalSince1970: 0)
 
     public init() {}
@@ -184,7 +188,7 @@ public struct ChatSettings: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case modelsLocation, modelsPath, model, keepLoaded, lowMemoryFallback, warnWhenResolveOpen, serverURL,
              tierOverride, chatsFolder, chatFormat, saveChats, hotKey, sendWithReturn, menuBarText, showStatusDot,
-             launchAtLogin, checkForUpdates, updateMode, checkTools, checkModels, voiceEnabled, whisperModel, modifiedAt
+             launchAtLogin, checkForUpdates, updateMode, checkTools, checkModels, voiceEnabled, whisperModel, pinPopover, modifiedAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -213,6 +217,7 @@ public struct ChatSettings: Codable, Equatable, Sendable {
         checkModels = v(.checkModels, d.checkModels)
         voiceEnabled = v(.voiceEnabled, d.voiceEnabled)
         whisperModel = v(.whisperModel, d.whisperModel as String?)
+        pinPopover = v(.pinPopover, d.pinPopover)
         modifiedAt = v(.modifiedAt, d.modifiedAt)
     }
 

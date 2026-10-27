@@ -29,6 +29,7 @@ struct PopoverView: View {
                 .padding(.horizontal, 7).padding(.vertical, 3)
                 .background(Color.secondary.opacity(0.12), in: Capsule())
                 .foregroundStyle(.secondary)
+            PinButton(settingsStore: settingsStore)
             GearMenu(actions: actions, hub: hub)
         }
         .padding(.horizontal, 12).padding(.vertical, 10)
@@ -57,7 +58,7 @@ struct PopoverView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(nsColor: .textBackgroundColor).opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
             .modifier(ImageDropModifier(engine: engine))
-            ComposerView(engine: engine, voice: hub.voiceButton)
+            ComposerView(engine: engine, voice: hub.voiceButton, attach: { actions.attachImages() })
             HStack(spacing: 6) {
                 if let menu = hub.instructionsMenu { menu } else {
                     Text("Instructions: \(hub.instructionsSummary)").font(.caption).foregroundStyle(.secondary).lineLimit(1)
@@ -85,6 +86,23 @@ struct PopoverView: View {
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
         }
+    }
+}
+
+/// Pin: keeps the popover open while you click Finder (to drag in an image). Remembered in Settings.
+struct PinButton: View {
+    @ObservedObject var settingsStore: SettingsStore
+    var body: some View {
+        let pinned = settingsStore.settings.pinPopover
+        Button { settingsStore.update { $0.pinPopover.toggle() } } label: {
+            Image(systemName: pinned ? "pin.fill" : "pin")
+                .rotationEffect(.degrees(pinned ? 0 : 45))
+                .foregroundStyle(pinned ? Color.accentColor : Color.secondary)
+        }
+        .buttonStyle(.borderless)
+        .help(pinned ? "Pinned: stays open when you click other apps. Click to unpin."
+                     : "Pin to keep ChatGauge open while you click other apps (for dragging in images)")
+        .accessibilityLabel(pinned ? "Unpin popover" : "Pin popover")
     }
 }
 

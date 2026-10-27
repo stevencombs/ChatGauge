@@ -10,7 +10,8 @@ enum UISelfTest {
         ProcessInfo.processInfo.environment["CHATGAUGE_UI_SELFTEST"].map { URL(fileURLWithPath: $0, isDirectory: true) }
     }
 
-    static func run(out: URL, open: @escaping () -> Void, view: @escaping () -> NSView?, engine: ChatEngine) {
+    static func run(out: URL, open: @escaping () -> Void, view: @escaping () -> NSView?, engine: ChatEngine,
+                    extra: (@MainActor (URL) async -> String)? = nil) {
         try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
         Task { @MainActor in
             func wait(_ s: Double) async { try? await Task.sleep(nanoseconds: UInt64(s * 1_000_000_000)) }
@@ -30,6 +31,7 @@ enum UISelfTest {
             snap("3-after")
             await wait(2)
             snap("4-later")
+            if let extra { log += await extra(out) }
             try? log.write(to: out.appendingPathComponent("report.txt"), atomically: true, encoding: .utf8)
             exit(0)
         }

@@ -146,7 +146,7 @@ struct ChatWindowView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(nsColor: .textBackgroundColor).opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
             .modifier(ImageDropModifier(engine: engine))
-            ComposerView(engine: engine, voice: hub.voiceButton)
+            ComposerView(engine: engine, voice: hub.voiceButton, attach: { actions.attachImages() })
             HStack(spacing: 6) {
                 StatusDot(level: engine.status.level)
                 StatusLine(engine: engine)
