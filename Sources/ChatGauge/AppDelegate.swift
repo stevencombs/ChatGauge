@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     lazy var voice = VoiceInput(engine: engine) { [instructions] in instructions.file.whisperPrompt() }
     let launchAtLogin = LaunchAtLogin()
     let settingsRouter = SettingsRouter()
+    lazy var updates = UpdateCenter(engine: engine, settingsStore: settingsStore)
 
     private var statusItem: NSStatusItem!
     private let popover = NSPopover()
@@ -71,6 +72,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         configureChats()
         hub.voiceButton = AnyView(VoiceButton(voice: voice))
         configureSettings()
+        configureUpdates()
+    }
+
+    private func configureUpdates() {
+        let center = updates
+        center.openUpdatesTab = { [weak self] in self?.showSettings(tab: "updates") }
+        hub.updatesPane = AnyView(UpdatesPane(center: center, store: settingsStore) { [weak self] in self?.settingsRouter.tab = .whatsnew })
+        hub.aboutUpdatesRow = AnyView(AboutUpdatesRow(center: center))
+        hub.updatesRow = AnyView(UpdatesPopoverRow(center: center) { [weak self] in self?.showSettings(tab: "updates") })
+        hub.diagnostics.append { [weak center] in center?.diagnostics ?? [] }
+        center.$items.map { $0.contains(where: \.needsUpdate) }.removeDuplicates()
+            .sink { [weak self] v in self?.hub.updateAvailable = v }
+            .store(in: &cancellables)
+        center.start()
     }
 
     private func configureSettings() {
