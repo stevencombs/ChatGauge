@@ -29,6 +29,7 @@ struct PopoverView: View {
                 .padding(.horizontal, 7).padding(.vertical, 3)
                 .background(Color.secondary.opacity(0.12), in: Capsule())
                 .foregroundStyle(.secondary)
+            if let switcher = hub.chatSwitcher { switcher }
             PinButton(settingsStore: settingsStore)
             GearMenu(actions: actions, hub: hub)
         }
@@ -137,6 +138,8 @@ final class FeatureHub: ObservableObject {
     @Published var voiceButton: AnyView?
     @Published var instructionsSummary = "Default"
     @Published var instructionsMenu: AnyView?
+    /// The popover header's chat switcher (from the chats feature).
+    @Published var chatSwitcher: AnyView?
     /// Settings → Updates content and the About tab's update row (from the updates feature).
     @Published var updatesPane: AnyView?
     @Published var aboutUpdatesRow: AnyView?

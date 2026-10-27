@@ -158,6 +158,10 @@ public struct ChatSettings: Codable, Equatable, Sendable {
     public var chatsFolder: String? = nil              // nil = ~/Library/Application Support/ChatGauge/Chats
     public var chatFormat: ChatFileFormat = .markdown
     public var saveChats: Bool = true
+    /// After a new chat's first reply, ask the same local model for a short title (never a rename's).
+    public var autoTitles: Bool = true
+    /// Open the most recent chat when ChatGauge starts (otherwise it starts with a new chat).
+    public var reopenLastChat: Bool = false
     public var hotKey: HotKey = .standard
     public var sendWithReturn: Bool = true
 
@@ -187,7 +191,7 @@ public struct ChatSettings: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case modelsLocation, modelsPath, model, keepLoaded, lowMemoryFallback, warnWhenResolveOpen, serverURL,
-             tierOverride, chatsFolder, chatFormat, saveChats, hotKey, sendWithReturn, menuBarText, showStatusDot,
+             tierOverride, chatsFolder, chatFormat, saveChats, autoTitles, reopenLastChat, hotKey, sendWithReturn, menuBarText, showStatusDot,
              launchAtLogin, checkForUpdates, updateMode, checkTools, checkModels, voiceEnabled, whisperModel, pinPopover, modifiedAt
     }
 
@@ -206,6 +210,8 @@ public struct ChatSettings: Codable, Equatable, Sendable {
         chatsFolder = v(.chatsFolder, d.chatsFolder as String?)
         chatFormat = v(.chatFormat, d.chatFormat)
         saveChats = v(.saveChats, d.saveChats)
+        autoTitles = v(.autoTitles, d.autoTitles)
+        reopenLastChat = v(.reopenLastChat, d.reopenLastChat)
         hotKey = v(.hotKey, d.hotKey)
         sendWithReturn = v(.sendWithReturn, d.sendWithReturn)
         menuBarText = v(.menuBarText, d.menuBarText)

@@ -25,6 +25,9 @@ class H(BaseHTTPRequestHandler):
             time.sleep(1.0)
             if MODEL not in loaded: loaded.append(MODEL)
             return self._json({"model": MODEL, "response": "", "done": True})
+        if self.path == "/api/chat" and body.get("stream") is False:
+            # A title request (non-streaming), answered the way small models often do: quoted, with a period.
+            return self._json({"model": MODEL, "message": {"role": "assistant", "content": "\"Status Check.\""}, "done": True})
         if self.path == "/api/chat":
             self.send_response(200); self.send_header("Content-Type", "application/x-ndjson")
             self.send_header("Transfer-Encoding", "chunked"); self.end_headers()

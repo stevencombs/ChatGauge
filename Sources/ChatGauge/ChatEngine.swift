@@ -333,9 +333,41 @@ final class ChatEngine: ObservableObject {
         if !wasLoaded && error == nil { ledger.recordLoad(model, wasAlreadyLoaded: false) }
         conversation.updatedAt = Date()
         onConversationUpdated?(conversation)
+        maybeAutoTitle(model: model, ok: error == nil && !cancelled)
         Task {
             loaded = (try? await client?.ps()) ?? loaded
             recomputeStatus()
+        }
+    }
+
+    /// Called when a model title arrives for a chat that's no longer the current one (the store saves it).
+    var onModelTitleForOtherChat: ((UUID, String) -> Void)?
+    /// True while a title request is out (the self-test waits on it).
+    @Published private(set) var titling = false
+
+    /// After a new chat's first reply, ask the same model (it just answered, so it's installed and loaded) for a
+    /// short title. One small non-streaming request; never pulls, never loads another model. Any failure keeps
+    /// the first-line title. A chat renamed by hand (`titleSource == .user`) is never touched.
+    private func maybeAutoTitle(model: String, ok: Bool) {
+        guard ok, settings.autoTitles, conversation.titleSource == .firstLine,
+              conversation.messages.filter({ $0.role == .user }).count == 1,
+              models.contains(where: { $0.name == model }) || loaded.contains(where: { $0.name == model }),
+              let msgs = AutoTitle.messages(for: conversation), let client else { return }
+        let id = conversation.id
+        let keep = keepAliveValue
+        titling = true
+        Task { [weak self] in
+            let raw = try? await client.chatOnce(model: model, messages: msgs, keepAlive: keep)
+            self?.titling = false
+            guard let self, let t = raw.flatMap(AutoTitle.clean) else { return }
+            if self.conversation.id == id {
+                guard self.conversation.titleSource == .firstLine else { return }
+                self.conversation.title = t
+                self.conversation.titleSource = .model
+                self.onConversationUpdated?(self.conversation)
+            } else {
+                self.onModelTitleForOtherChat?(id, t)
+            }
         }
     }
 

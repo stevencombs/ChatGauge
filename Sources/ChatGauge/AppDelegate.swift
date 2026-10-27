@@ -31,6 +31,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     func applicationDidFinishLaunching(_ notification: Notification) {
         MainMenu.install(target: self, settingsAction: #selector(openSettingsFromMenu(_:)),
                          chatWindowAction: #selector(openChatWindowFromMenu(_:)))
+        MainMenu.addChatMenu(target: self, previous: #selector(previousChatFromMenu(_:)), next: #selector(nextChatFromMenu(_:)),
+                             find: #selector(findChatFromMenu(_:)), trash: #selector(trashChatFromMenu(_:)))
         wireActions()
         configureFeatures()
 
@@ -69,11 +71,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         HotKeyCenter.shared.action = { [weak self] in self?.togglePopover(nil) }
 
         installPasteMonitor()
+        if settingsStore.settings.reopenLastChat && UISelfTest.outputFolder == nil { chats.reopenLast() }
         engine.start()
         if let out = UISelfTest.outputFolder {
             UISelfTest.run(out: out, open: { [weak self] in self?.showPopover() },
                            view: { [weak self] in self?.popover.contentViewController?.view }, engine: engine,
-                           extra: { [weak self] out in await self?.selfTestAttachAndDrop(out: out) ?? "" })
+                           extra: { [weak self] out in
+                               let a = await self?.selfTestAttachAndDrop(out: out) ?? ""
+                               return a + (await self?.selfTestChats(out: out) ?? "")
+                           })
         }
     }
 
@@ -119,6 +125,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
 
     private func configureChats() {
         let store = chats
+        store.engine = engine
+        engine.onModelTitleForOtherChat = { id, title in store.applyModelTitle(id, title) }
+        hub.chatSwitcher = AnyView(ChatSwitcherMenu(store: store, engine: engine,
+                                                    search: { [weak self] in self?.findChat() },
+                                                    showAll: { [weak self] in self?.showChatWindow() }))
         engine.onConversationUpdated = { [weak self] c in
             guard let self, let saved = store.save(c) else { return }
             // Remember the saved image names so the next save doesn't rewrite them.
@@ -192,6 +203,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     func showInstructions() {
         popover.performClose(nil)
         instructionsOpener?()
+    }
+
+    // MARK: Chat shortcuts (⌥⌘↑ / ⌥⌘↓, ⌘F, ⌘⌫)
+
+    @objc func previousChatFromMenu(_ sender: Any?) { chats.step(-1) }
+    @objc func nextChatFromMenu(_ sender: Any?) { chats.step(1) }
+    @objc func findChatFromMenu(_ sender: Any?) { findChat() }
+    @objc func trashChatFromMenu(_ sender: Any?) { promptTrashCurrentChat() }
+
+    /// ⌘F / "Search…": the chat window with its search field focused.
+    func findChat() {
+        showChatWindow()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { self.chats.searchFocusToken += 1 }
+    }
+
+    /// ⌘⌫: asks, then moves the open chat to the Trash (a sheet on the chat window, else a dialog).
+    func promptTrashCurrentChat() {
+        guard let s = chats.current else { NSSound.beep(); return }
+        let w = chatWindow?.nsWindow
+        chats.confirmTrash(s, window: (w?.isVisible == true && !popover.isShown) ? w : nil)
+    }
+
+    /// Chat shortcuts for the popover and the chat window. Returns true when handled.
+    private func handleChatShortcut(_ event: NSEvent) -> Bool {
+        let mods = event.modifierFlags.intersection([.command, .option, .shift, .control])
+        let inPopover = popover.isShown && event.window === popover.contentViewController?.view.window
+        let inChatWindow = event.window === chatWindow?.nsWindow
+        guard inPopover || inChatWindow else { return false }
+        switch (event.keyCode, mods) {
+        case (126, [.command, .option]): chats.step(-1); return true
+        case (125, [.command, .option]): chats.step(1); return true
+        case (3, [.command]):
+            if inChatWindow { chats.searchFocusToken += 1 } else { findChat() }
+            return true
+        case (51, [.command]):
+            let editor = event.window?.firstResponder as? NSTextView
+            guard TrashShortcut.handles(editingText: editor != nil, fieldIsEmpty: editor?.string.isEmpty ?? true) else { return false }
+            promptTrashCurrentChat()
+            return true
+        default: return false
+        }
     }
 
     var settingsWindowOpener: ((String?) -> Void)?
@@ -460,6 +512,158 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         return log
     }
 
+    /// Self-test for chat organizing: auto titles, groups, pinning, switching (keys and the popover switcher),
+    /// duplicate, export, ⌘F and the ⌘⌫ prompt (answered Cancel: nothing goes to the Trash), reopen-last.
+    func selfTestChats(out: URL) async -> String {
+        func wait(_ s: Double) async { try? await Task.sleep(nanoseconds: UInt64(s * 1_000_000_000)) }
+        func yn(_ b: Bool) -> String { b ? "PASS" : "FAIL" }
+        func key(_ code: UInt16, _ chars: String, _ mods: NSEvent.ModifierFlags, in w: NSWindow?) {
+            guard let w, let e = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: mods,
+                                                  timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: w.windowNumber,
+                                                  context: nil, characters: chars, charactersIgnoringModifiers: chars,
+                                                  isARepeat: false, keyCode: code) else { return }
+            NSApp.postEvent(e, atStart: false)
+        }
+        let up = String(Character(UnicodeScalar(NSUpArrowFunctionKey)!)), down = String(Character(UnicodeScalar(NSDownArrowFunctionKey)!))
+        var log = "== chats: organize / switch\n"
+        popover.performClose(nil); chatWindow?.nsWindow?.orderOut(nil); engine.attachments.removeAll()
+        await wait(0.5)
+
+        // Auto title for the first chat (the mock answers "\"Status Check.\"" to the non-streaming request).
+        for _ in 0..<20 where engine.titling { await wait(0.25) }
+        chats.refresh()
+        let first = engine.conversation
+        log += "   \(yn(first.title == "Status Check" && first.titleSource == .model)) auto title from the local model (title=\(first.title.debugDescription), source=\(first.titleSource.rawValue))\n"
+        let firstFile = chats.summaries.first { $0.id == first.id }.flatMap { try? String(contentsOf: $0.url, encoding: .utf8) } ?? ""
+        log += "   \(yn(firstFile.contains("title: \"Status Check\"") && firstFile.contains("titled: model"))) saved file has the model title\n"
+
+        // Seed a history across the groups.
+        let lib = chats.library, now = Date(), cal = Calendar.current
+        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 8, pixelsHigh: 8, bitsPerSample: 8, samplesPerPixel: 4,
+                                   hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)
+        let png = rep?.representation(using: .png, properties: [:])
+        @discardableResult
+        func seed(_ title: String, days: Int, minutes: Double = 0, pinned: Bool = false, image: Data? = nil) -> UUID {
+            let d = (cal.date(byAdding: .day, value: -days, to: now) ?? now).addingTimeInterval(-minutes * 60)
+            var c = Conversation(title: title, createdAt: d, updatedAt: d, model: "qwen2.5vl:7b",
+                                 messages: [ChatMessage(role: .user, text: "Seed \(title)", images: image.map { [$0] } ?? [], createdAt: d),
+                                            ChatMessage(role: .assistant, text: "Reply for \(title)", createdAt: d, model: "qwen2.5vl:7b")])
+            c.pinned = pinned
+            _ = try? lib.save(c, format: .markdown)
+            return c.id
+        }
+        seed("Trip ideas", days: 30, pinned: true)
+        seed("Recipe swap", days: 0, minutes: 5)
+        let yID = seed("Yesterday notes", days: 1)
+        seed("Weekly plan", days: 3)
+        let oldID = seed("Old project", days: 20, image: png)
+        chats.refresh()
+        let secs = chats.sections
+        log += "   \(yn(secs.map(\.group) == ChatGroup.allCases && secs.map(\.chats.count) == [1, 2, 1, 1, 1])) groups: \(secs.map { "\($0.group.rawValue)=\($0.chats.count)" }.joined(separator: ", "))\n"
+        let yText = chats.summaries.first { $0.id == yID }.flatMap { try? String(contentsOf: $0.url, encoding: .utf8) } ?? ""
+        log += "   \(yn(!yText.contains("pinned:") && !yText.contains("titled:"))) plain chat header has no pinned/titled lines (old-file shape)\n"
+
+        // Chat window: sidebar sections, then ⌥⌘↓ / ⌥⌘↑ through the sidebar order.
+        showChatWindow(); await wait(1)
+        let w = chatWindow?.nsWindow
+        w?.makeKeyAndOrderFront(nil)
+        let order = chats.ordered
+        log += "   order: \(order.map(\.title).joined(separator: " > "))\n"
+        chats.open(order[1]); await wait(0.4)
+        key(125, down, [.command, .option], in: w); await wait(0.6)
+        log += "   \(yn(engine.conversation.id == order[2].id)) ⌥⌘↓ in the chat window opens the next chat (\(engine.conversation.title))\n"
+        key(126, up, [.command, .option], in: w); await wait(0.4)
+        key(126, up, [.command, .option], in: w); await wait(0.6)
+        log += "   \(yn(engine.conversation.id == order[0].id)) ⌥⌘↑ twice goes back up to the pinned chat (\(engine.conversation.title))\n"
+        key(126, up, [.command, .option], in: w); await wait(0.4)
+        log += "   \(yn(engine.conversation.id == order[0].id)) ⌥⌘↑ at the top stays put\n"
+
+        // Pin / unpin.
+        if let weekly = chats.summaries.first(where: { $0.title == "Weekly plan" }) { chats.setPinned(weekly, true) }
+        if let trip = chats.summaries.first(where: { $0.title == "Trip ideas" }) { chats.setPinned(trip, false) }
+        await wait(0.5)
+        let s2 = chats.sections
+        let pinnedNames = s2.first { $0.group == .pinned }?.chats.map(\.title) ?? []
+        let olderNames = s2.first { $0.group == .older }?.chats.map(\.title) ?? []
+        log += "   \(yn(pinnedNames == ["Weekly plan"] && olderNames.contains("Trip ideas"))) pin Weekly plan, unpin Trip ideas (pinned=\(pinnedNames), older=\(olderNames))\n"
+        log += "   \(yn(engine.conversation.title == "Trip ideas" && !engine.conversation.pinned)) unpinning the open chat updates it too\n"
+        let wText = chats.summaries.first { $0.title == "Weekly plan" }.flatMap { try? String(contentsOf: $0.url, encoding: .utf8) } ?? ""
+        log += "   \(yn(wText.contains("\npinned: true\n"))) pinned is stored as `pinned: true` in the header\n"
+        if let v = w?.contentView { log += UISelfTest.snapshot("8-sidebar-groups", view: v, engine: engine, out: out) }
+
+        // Rename keeps a hand-made title.
+        chats.rename(engine.conversation.id, to: "Trips 2027"); await wait(0.3)
+        let rText = chats.current.flatMap { try? String(contentsOf: $0.url, encoding: .utf8) } ?? ""
+        log += "   \(yn(engine.conversation.titleSource == .user && rText.contains("titled: user"))) rename marks the title as the user's (auto titles leave it alone)\n"
+        let renamedID = engine.conversation.id
+        chats.applyModelTitle(renamedID, "Should Not Apply")
+        log += "   \(yn(chats.summaries.first { $0.id == renamedID }?.title == "Trips 2027")) a late model title doesn't replace a rename\n"
+
+        // Duplicate (with its image) and export.
+        if let old = chats.summaries.first(where: { $0.id == oldID }) {
+            let copy = chats.duplicate(old)
+            let copyImgs = copy?.messages.flatMap(\.imageFiles) ?? []
+            log += "   \(yn(copy?.title == "Old project copy" && copyImgs.count == 1 && copyImgs[0].contains(copy!.id.uuidString.lowercased()) == true && engine.conversation.id == copy?.id)) duplicate: new chat with its own image copy, opened (\(copyImgs))\n"
+            let dest = out.appendingPathComponent("export/Old project.md")
+            try? FileManager.default.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+            let ok = chats.exportMarkdown(old, to: dest, copyImages: true)
+            let md = (try? String(contentsOf: dest, encoding: .utf8)) ?? ""
+            let imgs = (try? FileManager.default.contentsOfDirectory(atPath: out.appendingPathComponent("export/Old project images").path)) ?? []
+            log += "   \(yn(ok && !md.contains("chatgauge") && !md.contains("<!--") && md.hasPrefix("# Old project") && md.contains("](Old%20project%20images/") && imgs.count == 1)) export as clean Markdown with copied images (\(imgs.count) image)\n"
+            let dest2 = out.appendingPathComponent("export/Old project no images.md")
+            _ = chats.exportMarkdown(old, to: dest2, copyImages: false)
+            let md2 = (try? String(contentsOf: dest2, encoding: .utf8)) ?? ""
+            log += "   \(yn(md2.contains("](file://") && !FileManager.default.fileExists(atPath: out.appendingPathComponent("export/Old project no images images").path))) export without copying links to the saved images\n"
+        }
+
+        // Popover switcher: pinned first, ~10 recent; picking one switches the popover's chat.
+        showPopover(); await wait(1)
+        let items = chats.switcher
+        log += "   \(yn(hub.chatSwitcher != nil && items.first?.title == "Weekly plan" && items.count == chats.summaries.count && items.count <= 10)) switcher lists \(items.count): \(items.map(\.title).joined(separator: ", "))\n"
+        if let target = items.first(where: { $0.title == "Recipe swap" }) {
+            chats.open(target); await wait(0.6)
+            // The popover renders the engine's conversation (see 9-popover-switcher.png); check the model behind it.
+            let shown = engine.conversation.messages.first?.text == "Seed Recipe swap"
+            log += "   \(yn(engine.conversation.id == target.id && shown && popover.isShown)) switcher pick shows that chat in the popover\n"
+        }
+        if let v = popover.contentViewController?.view { log += UISelfTest.snapshot("9-popover-switcher", view: v, engine: engine, out: out) }
+        let before = engine.conversation.id
+        key(125, down, [.command, .option], in: popover.contentViewController?.view.window); await wait(0.6)
+        log += "   \(yn(engine.conversation.id != before)) ⌥⌘↓ in the popover moves to the next chat (\(engine.conversation.title))\n"
+        // ⌘F in the popover: chat window with the search field focused.
+        key(3, "f", [.command], in: popover.contentViewController?.view.window); await wait(1.2)
+        let fr = chatWindow?.nsWindow?.firstResponder
+        let field = (fr as? NSTextView)?.delegate as? NSTextField
+        log += "   \(yn(!popover.isShown && chatWindow?.nsWindow?.isVisible == true && field?.placeholderString == "Search chats")) ⌘F / Search…: chat window with search focused (first responder: \(fr.map { String(describing: type(of: $0)) } ?? "none"), placeholder=\(field?.placeholderString ?? "-"))\n"
+
+        // ⌘⌫ asks first (answered Cancel). In a field with text it stays "delete to start of line".
+        if let cw = chatWindow?.nsWindow {
+            chats.query = "Recipe"; await wait(0.4)
+            (cw.firstResponder as? NSTextView)?.string = "Recipe"
+            key(51, "\u{8}", [.command], in: cw); await wait(0.8)
+            log += "   \(yn(cw.attachedSheet == nil)) ⌘⌫ while typing in a field with text: no trash prompt\n"
+            chats.query = ""
+            cw.makeFirstResponder(nil); await wait(0.3)
+            let keep = engine.conversation.id
+            key(51, "\u{8}", [.command], in: cw); await wait(0.8)
+            let sheet = cw.attachedSheet
+            log += "   \(yn(sheet != nil)) ⌘⌫ asks before moving the open chat to the Trash\n"
+            if let v = sheet?.contentView { log += UISelfTest.snapshot("10-trash-prompt", view: v, engine: engine, out: out) }
+            if let sheet { cw.endSheet(sheet, returnCode: .alertSecondButtonReturn) }
+            await wait(0.5)
+            log += "   \(yn(chats.summaries.contains { $0.id == keep } && engine.conversation.id == keep)) Cancel keeps the chat\n"
+        }
+
+        // Reopen the last chat at launch (the same call launch makes).
+        engine.newChat(); await wait(0.3)
+        let last = ChatGrouping.lastChat(chats.summaries)
+        let reopened = chats.reopenLast()
+        log += "   \(yn(reopened && engine.conversation.id == last?.id)) reopen last chat picks the most recent (\(engine.conversation.title))\n"
+        log += "   \(yn(!ChatSettings().reopenLastChat && ChatSettings().autoTitles)) defaults: reopen last off, auto titles on\n"
+        chatWindow?.nsWindow?.orderOut(nil)
+        return log
+    }
+
     func popoverDidClose(_ notification: Notification) {
         stopOutsideClickMonitor()
         engine.schedule(interval: 60)
@@ -506,6 +710,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
                 }
                 if closed { return nil }
             }
+            if MainActor.assumeIsolated({ self?.handleChatShortcut(event) ?? false }) { return nil }
             let isPaste = event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command
                 && event.charactersIgnoringModifiers?.lowercased() == "v"
             guard isPaste else { return event }

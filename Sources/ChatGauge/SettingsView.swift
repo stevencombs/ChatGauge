@@ -303,6 +303,13 @@ private struct ChatPane: View {
             PrefToggle(label: "Save chats", detail: "Off: chats disappear when you start a new one",
                        isOn: Binding(get: { s.saveChats }, set: { v in store.update { $0.saveChats = v } }))
             Divider()
+            PrefToggle(label: "Name new chats with the local model",
+                       detail: "After the first reply, the same model suggests a short title. Chats you renamed keep their name.",
+                       isOn: Binding(get: { s.autoTitles }, set: { v in store.update { $0.autoTitles = v } }))
+            Divider()
+            PrefToggle(label: "Reopen the last chat at launch", detail: "Off: ChatGauge starts with a new chat",
+                       isOn: Binding(get: { s.reopenLastChat }, set: { v in store.update { $0.reopenLastChat = v } }))
+            Divider()
             VStack(alignment: .leading, spacing: 6) {
                 Text("Save chats in")
                 Picker("", selection: Binding(get: { place }, set: { setPlace($0) })) {

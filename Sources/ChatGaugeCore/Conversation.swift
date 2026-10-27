@@ -34,9 +34,18 @@ public struct ChatMessage: Identifiable, Equatable, Sendable {
     }
 }
 
+/// Where a chat's title came from. Only `.firstLine` titles are replaced by a model title; `.user` (renamed by
+/// hand) is never changed automatically.
+public enum TitleSource: String, Codable, Sendable {
+    case firstLine, model, user
+}
+
 public struct Conversation: Identifiable, Equatable, Sendable {
     public var id: UUID
     public var title: String
+    /// Pinned chats sit at the top of the history (stored as `pinned: true` in the file header).
+    public var pinned: Bool = false
+    public var titleSource: TitleSource = .firstLine
     public var createdAt: Date
     public var updatedAt: Date
     public var model: String?

@@ -7,6 +7,8 @@ public struct ChatSummary: Identifiable, Equatable, Sendable {
     public var createdAt: Date
     public var updatedAt: Date
     public var model: String?
+    public var pinned: Bool = false
+    public var titleSource: TitleSource = .firstLine
     public var preview: String
     public var messageCount: Int
     public var url: URL
@@ -59,6 +61,9 @@ public enum ChatCodec {
         out += "updated: \(iso.string(from: c.updatedAt))\n"
         if let m = c.model { out += "model: \(yamlString(m))\n" }
         if let i = c.instructions { out += "instructions: \(yamlString(i))\n" }
+        // Written only when set, so files for plain chats look exactly as they did in earlier builds.
+        if c.pinned { out += "pinned: true\n" }
+        if c.titleSource != .firstLine { out += "titled: \(c.titleSource.rawValue)\n" }
         out += "---\n\n# \(c.title.isEmpty ? "Chat" : c.title)\n"
         for m in c.messages where m.role != .system {
             let meta = Meta(role: m.role, id: m.id, createdAt: iso.string(from: m.createdAt), model: m.model, note: m.note,
@@ -71,6 +76,24 @@ public enum ChatCodec {
                 out += "\n![Image \(i + 1)](\(f.replacingOccurrences(of: " ", with: "%20")))\n"
             }
             if let n = m.note { out += "\n> \(n.replacingOccurrences(of: "\n", with: " "))\n" }
+            if let e = m.error { out += "\n> ⚠️ \(e.replacingOccurrences(of: "\n", with: " "))\n" }
+        }
+        return out
+    }
+
+    /// A plain Markdown copy for sharing: title, a one-line source note, and the messages. No front matter or
+    /// hidden markers, so it reads cleanly anywhere (it can't be loaded back into ChatGauge; the saved file can).
+    public static func cleanMarkdown(_ c: Conversation, displayDate: (Date) -> String = defaultDisplay,
+                                     imageLink: (String) -> String = { $0 }) -> String {
+        var out = "# \(c.title.isEmpty ? "Chat" : c.title)\n\n"
+        out += "*ChatGauge chat · \(displayDate(c.createdAt))\(c.model.map { " · \($0)" } ?? "")*\n"
+        for m in c.messages where m.role != .system {
+            let who = m.role == .user ? "You" : (m.model ?? "Assistant")
+            out += "\n---\n\n**\(who)** · \(displayDate(m.createdAt))\n\n"
+            if !m.text.isEmpty { out += m.text + "\n" }
+            for (i, f) in m.imageFiles.enumerated() {
+                out += "\n![Image \(i + 1)](\(imageLink(f).replacingOccurrences(of: " ", with: "%20")))\n"
+            }
             if let e = m.error { out += "\n> ⚠️ \(e.replacingOccurrences(of: "\n", with: " "))\n" }
         }
         return out
@@ -97,6 +120,8 @@ public enum ChatCodec {
         let created = fm["created"].flatMap(date) ?? Date(timeIntervalSince1970: 0)
         var c = Conversation(id: id, title: fm["title"] ?? "", createdAt: created,
                              updatedAt: fm["updated"].flatMap(date) ?? created, model: fm["model"], instructions: fm["instructions"])
+        c.pinned = fm["pinned"]?.lowercased() == "true"
+        c.titleSource = fm["titled"].flatMap(TitleSource.init(rawValue:)) ?? .firstLine
 
         var current: (Meta, [String])?
         func flush() {
@@ -163,6 +188,8 @@ public enum ChatCodec {
         var updatedAt: String
         var model: String?
         var instructions: String?
+        var pinned: Bool?
+        var titled: TitleSource?
         var messages: [JSONMessage]
     }
 
@@ -180,6 +207,7 @@ public enum ChatCodec {
     public static func json(_ c: Conversation) -> Data {
         let j = JSONChat(id: c.id, title: c.title, createdAt: iso.string(from: c.createdAt), updatedAt: iso.string(from: c.updatedAt),
                          model: c.model, instructions: c.instructions,
+                         pinned: c.pinned ? true : nil, titled: c.titleSource == .firstLine ? nil : c.titleSource,
                          messages: c.messages.filter { $0.role != .system }.map {
                              JSONMessage(id: $0.id, role: $0.role, text: $0.text, createdAt: iso.string(from: $0.createdAt), model: $0.model,
                                          note: $0.note, error: $0.error, images: $0.imageFiles.isEmpty ? nil : $0.imageFiles)
@@ -192,12 +220,15 @@ public enum ChatCodec {
     public static func parseJSON(_ d: Data) -> Conversation? {
         guard let j = try? JSONDecoder().decode(JSONChat.self, from: d), j.app == "ChatGauge" else { return nil }
         let created = date(j.createdAt) ?? Date(timeIntervalSince1970: 0)
-        return Conversation(id: j.id, title: j.title, createdAt: created, updatedAt: date(j.updatedAt) ?? created,
-                            model: j.model, instructions: j.instructions,
-                            messages: j.messages.map {
-                                ChatMessage(id: $0.id, role: $0.role, text: $0.text, createdAt: date($0.createdAt) ?? created,
-                                            model: $0.model, note: $0.note, error: $0.error, imageFiles: $0.images ?? [])
-                            })
+        var c = Conversation(id: j.id, title: j.title, createdAt: created, updatedAt: date(j.updatedAt) ?? created,
+                             model: j.model, instructions: j.instructions,
+                             messages: j.messages.map {
+                                 ChatMessage(id: $0.id, role: $0.role, text: $0.text, createdAt: date($0.createdAt) ?? created,
+                                             model: $0.model, note: $0.note, error: $0.error, imageFiles: $0.images ?? [])
+                             })
+        c.pinned = j.pinned ?? false
+        c.titleSource = j.titled ?? .firstLine
+        return c
     }
 
     // MARK: Names
@@ -213,7 +244,7 @@ public enum ChatCodec {
 
     public static func shortID(_ id: UUID) -> String { String(id.uuidString.lowercased().prefix(8)) }
 
-    static func safeTitle(_ t: String) -> String {
+    public static func safeTitle(_ t: String) -> String {
         let bad = CharacterSet(charactersIn: "/\\:*?\"<>|[]#^\n\r\t").union(.controlCharacters)
         let cleaned = String(String.UnicodeScalarView(t.unicodeScalars.map { bad.contains($0) ? " " : $0 }))
             .split(separator: " ").joined(separator: " ")
@@ -236,7 +267,8 @@ public struct ChatLibrary: Sendable {
             let body = c.messages.map(\.text).joined(separator: " ")
             let preview = c.messages.last(where: { !$0.text.isEmpty })?.text.replacingOccurrences(of: "\n", with: " ") ?? ""
             return ChatSummary(id: c.id, title: c.title.isEmpty ? "Chat" : c.title, createdAt: c.createdAt, updatedAt: c.updatedAt,
-                               model: c.model, preview: String(preview.prefix(120)), messageCount: c.messages.count, url: url,
+                               model: c.model, pinned: c.pinned, titleSource: c.titleSource,
+                               preview: String(preview.prefix(120)), messageCount: c.messages.count, url: url,
                                searchText: (c.title + " " + body).lowercased())
         }
         .sorted { $0.updatedAt > $1.updatedAt }
@@ -298,8 +330,71 @@ public struct ChatLibrary: Sendable {
     public func rename(_ id: UUID, to title: String, format: ChatFileFormat) throws {
         guard let url = existing(id).first, var c = load(url) else { return }
         c.title = String(title.replacingOccurrences(of: "\n", with: " ").prefix(120))
+        c.titleSource = .user
         let fmt = ChatFileFormat(rawValue: url.pathExtension == "json" ? "json" : "markdown") ?? format
         try save(c, format: fmt)
+    }
+
+    /// The saved format of a chat's file (so edits keep it).
+    private func format(of url: URL, default d: ChatFileFormat) -> ChatFileFormat {
+        url.pathExtension.lowercased() == "json" ? .json : (url.pathExtension.lowercased() == "md" ? .markdown : d)
+    }
+
+    /// Pins or unpins a saved chat (rewrites its header; the chat's updated time is left alone).
+    public func setPinned(_ id: UUID, _ pinned: Bool, format: ChatFileFormat) throws {
+        guard let url = existing(id).first, var c = load(url), c.pinned != pinned else { return }
+        c.pinned = pinned
+        try save(c, format: self.format(of: url, default: format))
+    }
+
+    /// Sets a model-made title, only if the chat still has its first-line title (never over a rename).
+    @discardableResult
+    public func applyModelTitle(_ id: UUID, _ title: String, format: ChatFileFormat) throws -> Bool {
+        guard let url = existing(id).first, var c = load(url), c.titleSource == .firstLine else { return false }
+        c.title = title
+        c.titleSource = .model
+        try save(c, format: self.format(of: url, default: format))
+        return true
+    }
+
+    /// Copies a chat (messages and images) as a new chat named "<title> copy", unpinned, dated now.
+    @discardableResult
+    public func duplicate(_ id: UUID, format: ChatFileFormat, now: Date = Date()) throws -> Conversation? {
+        guard let url = existing(id).first, let src = load(url) else { return nil }
+        var c = Conversation(title: "\(src.title.isEmpty ? "Chat" : src.title) copy", createdAt: now, updatedAt: now,
+                             model: src.model, instructions: src.instructions, messages: src.messages)
+        c.titleSource = .user
+        for i in c.messages.indices {
+            c.messages[i].id = UUID()
+            c.messages[i].imageFiles = []   // save() writes the image bytes into the copy's own folder
+        }
+        return try save(c, format: self.format(of: url, default: format)).1
+    }
+
+    /// Writes a clean Markdown copy of a chat (no ChatGauge header or markers) to `destination`. With
+    /// `copyImages`, images go in "<name> images/" beside it and are linked relatively; otherwise they link to
+    /// the originals in the chats folder.
+    public func exportMarkdown(_ id: UUID, to destination: URL, copyImages: Bool) throws {
+        guard let url = existing(id).first, let c = read(url) else { throw CocoaError(.fileNoSuchFile) }
+        let base = destination.deletingPathExtension().lastPathComponent
+        let imgDirName = "\(base) images"
+        let imgDir = destination.deletingLastPathComponent().appendingPathComponent(imgDirName, isDirectory: true)
+        var links: [String: String] = [:]
+        let all = c.messages.flatMap(\.imageFiles)
+        if copyImages && !all.isEmpty {
+            try fm.createDirectory(at: imgDir, withIntermediateDirectories: true)
+            for rel in all {
+                let name = (rel as NSString).lastPathComponent
+                let dest = imgDir.appendingPathComponent(name)
+                if fm.fileExists(atPath: dest.path) { try fm.removeItem(at: dest) }
+                try fm.copyItem(at: folder.appendingPathComponent(rel), to: dest)
+                links[rel] = "\(imgDirName)/\(name)"
+            }
+        } else {
+            for rel in all { links[rel] = folder.appendingPathComponent(rel).absoluteString }
+        }
+        let md = ChatCodec.cleanMarkdown(c, imageLink: { links[$0] ?? $0 })
+        try Data(md.utf8).write(to: destination, options: .atomic)
     }
 
     /// Moves the chat file and its images to the Trash.

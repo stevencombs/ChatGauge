@@ -121,4 +121,29 @@ enum MainMenu {
 
         NSApp.mainMenu = main
     }
+
+    /// The Chat menu. ⌥⌘↑/↓ and ⌘F are also handled by the app's key monitor; ⌘⌫ is only there (as a menu key
+    /// equivalent it would beat "delete to start of line" in text fields), so the item just names it.
+    @MainActor
+    static func addChatMenu(target: AnyObject, previous: Selector, next: Selector, find: Selector, trash: Selector) {
+        guard let main = NSApp.mainMenu else { return }
+        let item = NSMenuItem()
+        let menu = NSMenu(title: "Chat")
+        let up = String(Character(UnicodeScalar(NSUpArrowFunctionKey)!))
+        let down = String(Character(UnicodeScalar(NSDownArrowFunctionKey)!))
+        for (title, sel, key, mods) in [("Previous Chat", previous, up, NSEvent.ModifierFlags([.command, .option])),
+                                        ("Next Chat", next, down, [.command, .option]),
+                                        ("Find Chat…", find, "f", [.command])] {
+            let i = NSMenuItem(title: title, action: sel, keyEquivalent: key)
+            i.keyEquivalentModifierMask = mods
+            i.target = target
+            menu.addItem(i)
+        }
+        menu.addItem(.separator())
+        let t = NSMenuItem(title: "Move Chat to Trash… (⌘⌫)", action: trash, keyEquivalent: "")
+        t.target = target
+        menu.addItem(t)
+        item.submenu = menu
+        main.insertItem(item, at: min(2, main.numberOfItems))
+    }
 }

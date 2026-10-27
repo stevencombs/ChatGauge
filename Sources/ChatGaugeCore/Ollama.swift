@@ -122,7 +122,8 @@ public struct WireMessage: Equatable, Sendable {
 
 public enum ChatRequest {
     /// keep_alive: -1 keeps the model loaded, 0 unloads it, nil uses Ollama's default (5 min).
-    public static func body(model: String, messages: [WireMessage], keepAlive: Int? = nil, stream: Bool = true) -> Data {
+    public static func body(model: String, messages: [WireMessage], keepAlive: Int? = nil, stream: Bool = true,
+                            options: [String: Any]? = nil) -> Data {
         var o: [String: Any] = [
             "model": model,
             "stream": stream,
@@ -133,6 +134,7 @@ public enum ChatRequest {
             },
         ]
         if let k = keepAlive { o["keep_alive"] = k }
+        if let options { o["options"] = options }
         return (try? JSONSerialization.data(withJSONObject: o, options: [.sortedKeys])) ?? Data()
     }
 
@@ -315,6 +317,25 @@ public final class OllamaClient: @unchecked Sendable {
         r.setValue("application/json", forHTTPHeaderField: "Content-Type")
         r.httpBody = ChatRequest.body(model: model, messages: messages, keepAlive: keepAlive)
         return r
+    }
+
+    /// One non-streaming /api/chat reply (used for chat titles). Never pulls: an unknown model is just an error.
+    public func chatOnce(model: String, messages: [WireMessage], keepAlive: Int?, maxTokens: Int = 32,
+                         timeout: TimeInterval = 60) async throws -> String {
+        var r = URLRequest(url: base.appendingPathComponent("api/chat"), timeoutInterval: timeout)
+        r.httpMethod = "POST"
+        r.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        r.httpBody = ChatRequest.body(model: model, messages: messages, keepAlive: keepAlive, stream: false,
+                                      options: ["num_predict": maxTokens, "temperature": 0.2])
+        do {
+            let (d, resp) = try await session.data(for: r)
+            let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            guard code == 200, let chunk = ChatChunk.parse(d.trimmingWhitespace()) else {
+                throw OllamaError.http(code, ChatChunk.parse(d)?.error)
+            }
+            if let e = chunk.error { throw OllamaError.http(code, e) }
+            return chunk.content
+        } catch let e as OllamaError { throw e } catch { throw OllamaError.unreachable(error.localizedDescription) }
     }
 
     /// /api/pull request body (only ever sent from a button the user clicked).
