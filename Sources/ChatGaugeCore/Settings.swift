@@ -9,7 +9,7 @@ public enum ModelsLocationKind: String, Codable, Sendable, CaseIterable {
 }
 
 /// The model to chat with. `automatic` picks one by RAM tier.
-public enum ModelChoice: Codable, Equatable, Sendable {
+public enum ModelChoice: Codable, Hashable, Sendable {
     case automatic
     case named(String)
 

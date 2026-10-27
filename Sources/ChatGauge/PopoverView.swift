@@ -119,4 +119,9 @@ final class FeatureHub: ObservableObject {
     @Published var voiceButton: AnyView?
     @Published var instructionsSummary = "Default"
     @Published var instructionsMenu: AnyView?
+    /// Settings → Updates content and the About tab's update row (from the updates feature).
+    @Published var updatesPane: AnyView?
+    @Published var aboutUpdatesRow: AnyView?
+    /// Diagnostics lines added by features (updates, voice).
+    var diagnostics: [() -> [(String, String)]] = []
 }

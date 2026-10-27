@@ -12,6 +12,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     let instructions = InstructionsStore()
     lazy var chats = ChatStore(settingsStore: settingsStore)
     lazy var voice = VoiceInput(engine: engine) { [instructions] in instructions.file.whisperPrompt() }
+    let launchAtLogin = LaunchAtLogin()
+    let settingsRouter = SettingsRouter()
 
     private var statusItem: NSStatusItem!
     private let popover = NSPopover()
@@ -68,6 +70,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         configureInstructions()
         configureChats()
         hub.voiceButton = AnyView(VoiceButton(voice: voice))
+        configureSettings()
+    }
+
+    private func configureSettings() {
+        let router = settingsRouter
+        let window = HostedWindow(title: "ChatGauge Settings", size: NSSize(width: 760, height: 640), autosave: "ChatGaugeSettings", resizable: true) { [weak self] in
+            guard let self else { return AnyView(EmptyView()) }
+            let deps = SettingsDeps(settingsStore: self.settingsStore, engine: self.engine, instructions: self.instructions,
+                                    chats: self.chats, voice: self.voice, hub: self.hub, launchAtLogin: self.launchAtLogin)
+            return AnyView(SettingsView(deps: deps, router: router))
+        }
+        window.onClose = { [weak self] in
+            self?.settingsStore.saveNow()
+        }
+        settingsWindow = window
+        settingsWindowOpener = { tab in
+            if let tab, let t = SettingsTab(rawValue: tab) { router.tab = t }
+            window.show()
+        }
     }
 
     private func configureChats() {

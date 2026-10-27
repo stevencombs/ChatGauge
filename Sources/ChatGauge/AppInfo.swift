@@ -12,8 +12,9 @@ enum AppInfo {
     static let repo = "stevencombs/ChatGauge"
     static let repoURL = URL(string: "https://github.com/stevencombs/ChatGauge")!
     static let releasesURL = URL(string: "https://github.com/stevencombs/ChatGauge/releases")!
-    static let clipGaugeURL = URL(string: "https://github.com/stevencombs/ClipGauge")!
-    static let grokGaugeURL = URL(string: "https://github.com/stevencombs/GrokGauge")!
+    static let clipGaugeURL = URL(string: "https://stevencombs.github.io/ClipGauge/")!
+    static let grokGaugeURL = URL(string: "https://stevencombs.github.io/GrokGauge/")!
+    static let newIssueURL = URL(string: "https://github.com/stevencombs/ChatGauge/issues/new")!
     static let youTubeMain = (handle: "@retroCombs", url: URL(string: "https://www.youtube.com/@retroCombs")!)
     static let youTubeTech = (handle: "@retroCombs-tech", url: URL(string: "https://www.youtube.com/@retroCombs-tech")!)
     static let contactEmail = "retroCombs@icloud.com"
