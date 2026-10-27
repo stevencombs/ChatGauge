@@ -89,7 +89,7 @@ struct SettingsView: View {
 
     @ViewBuilder private var page: some View {
         switch router.tab {
-        case .model: ModelServerPane(engine: deps.engine, store: settingsStore)
+        case .model: ModelServerPane(engine: deps.engine, store: settingsStore, openSetup: deps.hub.openSetup)
         case .chat: ChatPane(store: settingsStore, chats: deps.chats, voice: deps.voice, engine: deps.engine)
         case .menubar: MenuBarPane(store: settingsStore, login: deps.launchAtLogin)
         case .updates:
@@ -156,6 +156,9 @@ private struct SettingsFooter: View {
 private struct ModelServerPane: View {
     @ObservedObject var engine: ChatEngine
     @ObservedObject var store: SettingsStore
+    var openSetup: () -> Void
+    @ViewState private var ownAgent = OwnAgentControl.installed
+    @ViewState private var ownAgentMessage: String?
 
     private var s: ChatSettings { store.settings }
     private var loc: ModelsLocation { engine.location }
@@ -194,6 +197,21 @@ private struct ModelServerPane: View {
             }
             if let m = engine.serverActionMessage {
                 Text(m).font(.caption).foregroundStyle(Palette.orange).padding(.bottom, 6)
+            }
+            if ownAgent || ownAgentMessage != nil {
+                Divider()
+                PrefRow(label: "ChatGauge's Ollama server", detail: ownAgentMessage ?? "\(OwnOllamaAgent.label), created by setup. Other servers are never touched.") {
+                    if ownAgent {
+                        Button("Remove…") {
+                            ownAgentMessage = OwnAgentControl.confirmRemove()
+                            ownAgent = OwnAgentControl.installed
+                        }
+                    }
+                }
+            }
+            Divider()
+            PrefRow(label: "Setup guide", detail: "Installs Ollama and the models on this Mac or an external drive. Steps already done are skipped.") {
+                Button("Run Setup Again…") { openSetup() }
             }
         }
 

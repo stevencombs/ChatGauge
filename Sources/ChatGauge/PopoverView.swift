@@ -145,4 +145,6 @@ final class FeatureHub: ObservableObject {
     @Published var aboutUpdatesRow: AnyView?
     /// Diagnostics lines added by features (updates, voice).
     var diagnostics: [() -> [(String, String)]] = []
+    /// Opens the setup guide (wired by the app delegate).
+    var openSetup: () -> Void = {}
 }

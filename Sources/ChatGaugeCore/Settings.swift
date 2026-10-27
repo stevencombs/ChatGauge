@@ -185,6 +185,10 @@ public struct ChatSettings: Codable, Equatable, Sendable {
     /// Pinned: the popover stays open when you click another app (Finder), so you can drag images into it.
     public var pinPopover: Bool = false
 
+    // Setup
+    /// When the first-run setup was finished (or dismissed with "Don't show again"). nil = never.
+    public var setupCompletedAt: Date? = nil
+
     public var modifiedAt: Date = Date(timeIntervalSince1970: 0)
 
     public init() {}
@@ -192,7 +196,7 @@ public struct ChatSettings: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case modelsLocation, modelsPath, model, keepLoaded, lowMemoryFallback, warnWhenResolveOpen, serverURL,
              tierOverride, chatsFolder, chatFormat, saveChats, autoTitles, reopenLastChat, hotKey, sendWithReturn, menuBarText, showStatusDot,
-             launchAtLogin, checkForUpdates, updateMode, checkTools, checkModels, voiceEnabled, whisperModel, pinPopover, modifiedAt
+             launchAtLogin, checkForUpdates, updateMode, checkTools, checkModels, voiceEnabled, whisperModel, pinPopover, setupCompletedAt, modifiedAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -224,6 +228,7 @@ public struct ChatSettings: Codable, Equatable, Sendable {
         voiceEnabled = v(.voiceEnabled, d.voiceEnabled)
         whisperModel = v(.whisperModel, d.whisperModel as String?)
         pinPopover = v(.pinPopover, d.pinPopover)
+        setupCompletedAt = v(.setupCompletedAt, d.setupCompletedAt as Date?)
         modifiedAt = v(.modifiedAt, d.modifiedAt)
     }
 

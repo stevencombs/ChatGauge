@@ -18,7 +18,7 @@ public struct OllamaAgent: Equatable, Sendable {
     /// The shared, neutral agent on the maker's Macs. Used if present; never restarted with -k by ChatGauge.
     public static let sharedLabel = "com.retrocombs.ollama-lexar"
     /// The agent ChatGauge would offer to install (only after the user approves).
-    public static let ownLabel = "com.retrocombs.chatgauge.ollama"
+    public static let ownLabel = "com.chatgauge.ollama"
 
     public static func parse(plist data: Data, path: String) -> OllamaAgent? {
         guard let o = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],

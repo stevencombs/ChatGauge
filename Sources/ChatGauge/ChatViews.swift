@@ -15,6 +15,8 @@ final class AppActions: ObservableObject {
     /// The paperclip: shows the image picker (the app decides where; see PopoverPolicy.attachInChatWindow).
     var attachImages: () -> Void = {}
     var quit: () -> Void = { NSApp.terminate(nil) }
+    /// The first-run setup guide (also Settings › Model & Server › Run Setup Again…).
+    var openSetup: () -> Void = {}
 }
 
 // MARK: Status
@@ -154,6 +156,10 @@ struct EmptyStateView: View {
                     switch engine.status {
                     case .folderMissing, .notChosen: Button("Model & Server…") { actions.openSettings("model") }
                     case .noModels: Button("Diagnostics…") { actions.openSettings("diagnostics") }
+                    default: EmptyView()
+                    }
+                    switch engine.status {
+                    case .driveMissing, .notChosen, .noModels, .serverDown, .folderMissing: Button("Run Setup…") { actions.openSetup() }
                     default: EmptyView()
                     }
                     Button("Check Again") { Task { await engine.refresh() } }

@@ -27,6 +27,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     var settingsWindow: HostedWindow?
     var chatWindow: HostedWindow?
     var instructionsWindow: HostedWindow?
+    var setupWindow: HostedWindow?
+    var setupModel: SetupModel?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         MainMenu.install(target: self, settingsAction: #selector(openSettingsFromMenu(_:)),
@@ -73,12 +75,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         installPasteMonitor()
         if settingsStore.settings.reopenLastChat && UISelfTest.outputFolder == nil { chats.reopenLast() }
         engine.start()
+        if UISelfTest.outputFolder == nil && setupShouldAutoShow() { showSetup() }
         if let out = UISelfTest.outputFolder {
             UISelfTest.run(out: out, open: { [weak self] in self?.showPopover() },
                            view: { [weak self] in self?.popover.contentViewController?.view }, engine: engine,
                            extra: { [weak self] out in
                                let a = await self?.selfTestAttachAndDrop(out: out) ?? ""
-                               return a + (await self?.selfTestChats(out: out) ?? "")
+                               let c = await self?.selfTestChats(out: out) ?? ""
+                               return a + c + (await self?.selfTestSetup(out: out) ?? "")
                            })
         }
     }
@@ -186,6 +190,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         actions.openInstructions = { [weak self] in self?.showInstructions() }
         actions.showAbout = { [weak self] in self?.showSettings(tab: "about") }
         actions.checkForUpdates = { [weak self] in self?.showSettings(tab: "updates") }
+        actions.openSetup = { [weak self] in self?.showSetup() }
+        hub.openSetup = { [weak self] in self?.showSetup() }
     }
 
     // MARK: Windows (replaced by the real ones as features land)
@@ -198,6 +204,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     func showChatWindow() {
         popover.performClose(nil)
         chatWindowOpener?()
+    }
+
+    // MARK: Setup guide
+
+    /// Shown at first launch only on a Mac with nothing set up yet; an existing Ollama setup (or a settings file) means no.
+    func setupShouldAutoShow() -> Bool {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let s = settingsStore.settings
+        let snap = SetupSnapshot(settingsFileExisted: !settingsStore.firstLaunch, setupCompletedAt: s.setupCompletedAt,
+                                 agents: OllamaAgent.discover(home: home),
+                                 modelsOnDisk: ModelManifests.installed(in: engine.location.url).count,
+                                 ollamaInstalled: SetupEnv.find("ollama") != nil)
+        return SetupGate.shouldAutoShow(snap)
+    }
+
+    func showSetup() {
+        popover.performClose(nil)
+        if setupWindow == nil {
+            let model = SetupModel(store: settingsStore, engine: engine)
+            setupModel = model
+            let window = HostedWindow(title: "Set Up ChatGauge", size: NSSize(width: 840, height: 620), autosave: "ChatGaugeSetup") { [weak self, weak model] in
+                guard let model else { return AnyView(EmptyView()) }
+                return AnyView(SetupWizardView(model: model, close: { self?.setupWindow?.close() }))
+            }
+            window.onClose = { [weak self] in
+                self?.setupModel?.stopAll()
+                self?.settingsStore.saveNow()
+                self?.setupWindow = nil
+                self?.setupModel = nil
+                Task { await self?.engine.refresh() }
+            }
+            setupWindow = window
+        }
+        setupWindow?.show()
     }
 
     func showInstructions() {

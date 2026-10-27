@@ -149,7 +149,7 @@ final class VoiceInput: ObservableObject {
 
     struct VoiceError: Error { var text: String }
 
-    nonisolated private static func transcribe(recording: URL, cli: String, ffmpeg: String?, model: String, modelName: String,
+    nonisolated static func transcribe(recording: URL, cli: String, ffmpeg: String?, model: String, modelName: String,
                                                prompt: String?, timeout: TimeInterval) -> Result<String, VoiceError> {
         let fm = FileManager.default
         var wav = recording
