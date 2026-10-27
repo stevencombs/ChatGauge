@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     let hub = FeatureHub()
     let instructions = InstructionsStore()
     lazy var chats = ChatStore(settingsStore: settingsStore)
+    lazy var voice = VoiceInput(engine: engine) { [instructions] in instructions.file.whisperPrompt() }
 
     private var statusItem: NSStatusItem!
     private let popover = NSPopover()
@@ -66,6 +67,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     func configureFeatures() {
         configureInstructions()
         configureChats()
+        hub.voiceButton = AnyView(VoiceButton(voice: voice))
     }
 
     private func configureChats() {
