@@ -59,7 +59,10 @@ struct PopoverView: View {
             .modifier(ImageDropModifier(engine: engine))
             ComposerView(engine: engine, voice: hub.voiceButton)
             HStack(spacing: 6) {
-                Text("Instructions: \(hub.instructionsSummary) · \(settingsStore.settings.hotKey.enabled ? settingsStore.settings.hotKey.display : "no shortcut")")
+                if let menu = hub.instructionsMenu { menu } else {
+                    Text("Instructions: \(hub.instructionsSummary)").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
+                Text("· \(settingsStore.settings.hotKey.enabled ? settingsStore.settings.hotKey.display : "no shortcut")")
                     .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 Spacer()
                 Button("Chat Window") { actions.openChatWindow() }.controlSize(.small)
@@ -115,4 +118,5 @@ final class FeatureHub: ObservableObject {
     @Published var updateAvailable = false
     @Published var voiceButton: AnyView?
     @Published var instructionsSummary = "Default"
+    @Published var instructionsMenu: AnyView?
 }

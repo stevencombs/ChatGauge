@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     lazy var engine = ChatEngine(settingsStore: settingsStore)
     let actions = AppActions()
     let hub = FeatureHub()
+    let instructions = InstructionsStore()
 
     private var statusItem: NSStatusItem!
     private let popover = NSPopover()
@@ -61,7 +62,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     /// Hook for later features (instructions, chats, voice, settings, updates).
-    func configureFeatures() {}
+    func configureFeatures() {
+        configureInstructions()
+    }
+
+    private func configureInstructions() {
+        let store = instructions
+        engine.systemPrompt = { store.file.systemPrompt() }
+        engine.instructionsName = { store.file.enabled ? store.file.active?.name : nil }
+        hub.instructionsMenu = AnyView(PresetMenu(store: store) { [weak self] in self?.showInstructions() })
+        let window = HostedWindow(title: "ChatGauge Instructions", size: NSSize(width: 640, height: 680), autosave: "ChatGaugeInstructions") { [weak self] in
+            guard let self else { return AnyView(EmptyView()) }
+            return AnyView(ScrollView {
+                InstructionsEditor(store: store, location: self.engine.location).padding(20)
+            }.frame(minWidth: 600, minHeight: 600))
+        }
+        instructionsWindow = window
+        instructionsOpener = { window.show() }
+    }
 
     private func wireActions() {
         actions.closePopover = { [weak self] in self?.popover.performClose(nil) }

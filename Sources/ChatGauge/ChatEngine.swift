@@ -28,6 +28,8 @@ final class ChatEngine: ObservableObject {
 
     /// The system prompt for new requests (set by the instructions store).
     var systemPrompt: () -> String? = { nil }
+    /// The active instructions preset's name (recorded on each chat).
+    var instructionsName: () -> String? = { nil }
     /// Called whenever a reply finishes (the chat store saves).
     var onConversationUpdated: ((Conversation) -> Void)?
 
@@ -269,6 +271,7 @@ final class ChatEngine: ObservableObject {
         if conversation.isEmpty {
             conversation.title = Conversation.makeTitle(from: text, hasImage: !images.isEmpty)
             conversation.model = model
+            conversation.instructions = instructionsName()
         }
         conversation.messages.append(ChatMessage(role: .user, text: text, images: images))
         let reply = ChatMessage(role: .assistant, text: "", model: model, note: decision.note)
