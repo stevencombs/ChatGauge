@@ -79,16 +79,34 @@ public struct HotKey: Codable, Equatable, Sendable {
     public var keyCode: UInt32
     public var carbonModifiers: UInt32
 
-    // Carbon modifier bits (Events.h)
+    // Carbon modifier bits (HIToolbox Events.h: cmdKeyBit 8, shiftKeyBit 9, optionKeyBit 11, controlKeyBit 12).
     public static let cmdKey: UInt32 = 1 << 8
     public static let shiftKey: UInt32 = 1 << 9
     public static let optionKey: UInt32 = 1 << 11
-    public static let controlKey: UInt32 = 1 << 13
+    public static let controlKey: UInt32 = 1 << 12
+    /// Build 7 and earlier wrote ⌃ as this bit, which Carbon reads as the right Shift key (rightShiftKeyBit 13),
+    /// so "⌃⌥C" was really registered as ⌥ + right ⇧ + C. ChatGauge never records right Shift on purpose.
+    public static let legacyControlKey: UInt32 = 1 << 13
 
     public init(enabled: Bool = true, keyCode: UInt32, carbonModifiers: UInt32) {
         self.enabled = enabled
         self.keyCode = keyCode
         self.carbonModifiers = carbonModifiers
+    }
+
+    /// Moves the old, wrong ⌃ bit to the real one. Anything else is left as is.
+    public static func migrated(_ mods: UInt32) -> UInt32 {
+        guard mods & legacyControlKey != 0 else { return mods }
+        return (mods & ~legacyControlKey) | controlKey
+    }
+
+    private enum CodingKeys: String, CodingKey { case enabled, keyCode, carbonModifiers }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        keyCode = try c.decode(UInt32.self, forKey: .keyCode)
+        carbonModifiers = Self.migrated(try c.decode(UInt32.self, forKey: .carbonModifiers))
     }
 
     /// ⌃⌥C (taken over from ClipGauge, which is retired). kVK_ANSI_C = 8.

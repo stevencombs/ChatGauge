@@ -57,6 +57,14 @@ public struct Conversation: Identifiable, Equatable, Sendable {
 
     public var isEmpty: Bool { !messages.contains { $0.role == .user } }
 
+    /// The reply still waiting for its first words, shown as the "Thinking…" row. Only while a reply streams, and
+    /// only the last message: once text arrives, the stream ends, or it fails, the row becomes the reply bubble.
+    public func pendingReplyID(streaming: Bool) -> UUID? {
+        guard streaming, let last = messages.last, last.role == .assistant, last.text.isEmpty, last.error == nil
+        else { return nil }
+        return last.id
+    }
+
     /// Title from the first user message: first line, at most 60 characters.
     public static func makeTitle(from text: String, hasImage: Bool = false) -> String {
         let line = text.split(whereSeparator: \.isNewline).first.map(String.init)?

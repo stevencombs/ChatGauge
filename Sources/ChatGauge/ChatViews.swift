@@ -100,13 +100,12 @@ struct MessagesView: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 10) {
+                // A plain VStack, not LazyVStack: the lazy stack kept showing the cached "Thinking…" row after the
+                // reply arrived (the row swapped view types under the same explicit id and was never redrawn).
+                let pendingID = engine.conversation.pendingReplyID(streaming: engine.isStreaming)
+                VStack(alignment: .leading, spacing: 10) {
                     ForEach(engine.conversation.messages) { m in
-                        if m.role == .assistant && m.text.isEmpty && m.error == nil && engine.isStreaming {
-                            PendingLine(engine: engine).id(m.id)
-                        } else {
-                            MessageBubble(message: m).id(m.id)
-                        }
+                        MessageRow(message: m, pending: m.id == pendingID, engine: engine)
                     }
                     Color.clear.frame(height: 1).id("bottom")
                 }
@@ -120,6 +119,16 @@ struct MessagesView: View {
             }
             .onAppear { proxy.scrollTo("bottom", anchor: .bottom) }
         }
+    }
+}
+
+/// One row: the "Thinking…" line while the reply has no words yet, then the reply bubble.
+struct MessageRow: View {
+    var message: ChatMessage
+    var pending: Bool
+    @ObservedObject var engine: ChatEngine
+    var body: some View {
+        if pending { PendingLine(engine: engine) } else { MessageBubble(message: message) }
     }
 }
 
