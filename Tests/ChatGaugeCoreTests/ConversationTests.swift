@@ -50,7 +50,7 @@ import Testing
     @Test func levels() {
         #expect(EngineStatus.ready(model: "m").level == .ok)
         #expect(EngineStatus.loading(model: "m").level == .busy)
-        #expect(EngineStatus.driveMissing(volume: "Lexar").level == .problem)
+        #expect(EngineStatus.driveMissing(volume: "ModelsDrive").level == .problem)
         #expect(EngineStatus.serverDown.level == .problem)
     }
 
@@ -65,7 +65,7 @@ import Testing
     @Test func modelAndText() {
         #expect(EngineStatus.ready(model: "qwen2.5vl:7b").model == "qwen2.5vl:7b")
         #expect(EngineStatus.serverDown.model == nil)
-        #expect(EngineStatus.driveMissing(volume: "Lexar").title.contains("Lexar"))
+        #expect(EngineStatus.driveMissing(volume: "ModelsDrive").title.contains("ModelsDrive"))
         #expect(EngineStatus.loading(model: "m").detail?.contains("10 seconds") == true)
     }
 }

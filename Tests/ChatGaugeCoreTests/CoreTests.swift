@@ -88,14 +88,14 @@ import Testing
     @Test func externalDriveStates() {
         var s = ChatSettings()
         s.modelsLocation = .external
-        s.modelsPath = "/Volumes/Lexar/Local-LLM/models"
+        s.modelsPath = "/Volumes/ModelsDrive/AI/models"
         let loc = ModelsLocation.from(s)
-        #expect(loc.volumeRoot == "/Volumes/Lexar" && loc.volumeName == "Lexar")
-        #expect(loc.availability { _ in false } == .driveMissing(volume: "Lexar"))
-        #expect(loc.availability { $0 == "/Volumes/Lexar" } == .folderMissing)
+        #expect(loc.volumeRoot == "/Volumes/ModelsDrive" && loc.volumeName == "ModelsDrive")
+        #expect(loc.availability { _ in false } == .driveMissing(volume: "ModelsDrive"))
+        #expect(loc.availability { $0 == "/Volumes/ModelsDrive" } == .folderMissing)
         #expect(loc.availability { _ in true } == .ready)
-        #expect(loc.whisperFolder.path == "/Volumes/Lexar/Local-LLM/models/whisper")
-        #expect(loc.clipGaugeInstructions.path == "/Volumes/Lexar/Local-LLM/config/custom-instructions.json")
+        #expect(loc.whisperFolder.path == "/Volumes/ModelsDrive/AI/models/whisper")
+        #expect(loc.clipGaugeInstructions.path == "/Volumes/ModelsDrive/AI/config/custom-instructions.json")
     }
 
     @Test func localDefault() {
@@ -115,15 +115,15 @@ import Testing
     <plist version="1.0"><dict>
     <key>Label</key><string>com.retrocombs.ollama-lexar</string>
     <key>ProgramArguments</key><array><string>/bin/sh</string><string>-c</string>
-    <string>while [ ! -d /Volumes/Lexar/Local-LLM/models/manifests-v2 ]; do sleep 15; done; exec /opt/homebrew/bin/ollama serve</string></array>
-    <key>EnvironmentVariables</key><dict><key>OLLAMA_MODELS</key><string>/Volumes/Lexar/Local-LLM/models</string></dict>
+    <string>while [ ! -d /Volumes/ModelsDrive/AI/models/manifests-v2 ]; do sleep 15; done; exec /opt/homebrew/bin/ollama serve</string></array>
+    <key>EnvironmentVariables</key><dict><key>OLLAMA_MODELS</key><string>/Volumes/ModelsDrive/AI/models</string></dict>
     </dict></plist>
     """
 
     @Test func parsesAgent() throws {
         let a = try #require(OllamaAgent.parse(plist: Data(plist.utf8), path: "/x.plist"))
         #expect(a.label == OllamaAgent.sharedLabel && a.runsOllama)
-        #expect(a.modelsPath == "/Volumes/Lexar/Local-LLM/models")
+        #expect(a.modelsPath == "/Volumes/ModelsDrive/AI/models")
     }
 
     @Test func parsesInlineEnv() throws {
@@ -137,9 +137,9 @@ import Testing
 
     @Test func plans() throws {
         let a = try #require(OllamaAgent.parse(plist: Data(plist.utf8), path: "/LA/x.plist"))
-        let path = "/Volumes/Lexar/Local-LLM/models"
+        let path = "/Volumes/ModelsDrive/AI/models"
         #expect(ServerPlan.decide(answering: true, availability: .ready, agents: [a], loadedLabels: [], modelsPath: path) == .useRunning)
-        #expect(ServerPlan.decide(answering: false, availability: .driveMissing(volume: "Lexar"), agents: [a], loadedLabels: [], modelsPath: path) == .waitForDrive(volume: "Lexar"))
+        #expect(ServerPlan.decide(answering: false, availability: .driveMissing(volume: "ModelsDrive"), agents: [a], loadedLabels: [], modelsPath: path) == .waitForDrive(volume: "ModelsDrive"))
         let k = ServerPlan.decide(answering: false, availability: .ready, agents: [a], loadedLabels: [a.label], modelsPath: path)
         #expect(k == .kickstart(label: a.label))
         #expect(ServerPlan.decide(answering: false, availability: .ready, agents: [a], loadedLabels: [], modelsPath: path) == .bootstrap(label: a.label, plist: "/LA/x.plist"))

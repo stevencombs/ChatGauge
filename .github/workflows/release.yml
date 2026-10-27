@@ -1,0 +1,60 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=$(tr -d '[:space:]' < VERSION)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check VERSION matches the tag
+        if: github.ref_type == 'tag'
+        run: |
+          file="$(tr -d '[:space:]' < VERSION)"
+          [[ "$file" == "${{ steps.version.outputs.version }}" ]] || { echo "VERSION is $file but the tag is ${{ steps.version.outputs.version }}"; exit 1; }
+
+      - name: Test
+        run: ./scripts/test.sh
+
+      - name: Build ChatGauge.app (universal, ad-hoc signed)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          REQUIRE_UNIVERSAL: "1"
+        run: ./scripts/build-app.sh
+
+      - name: Publish GitHub release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/ChatGauge-${{ steps.version.outputs.version }}.zip
+            dist/ChatGauge-${{ steps.version.outputs.version }}.zip.sha256
+          generate_release_notes: true
+          body: |
+            See [CHANGELOG.md](https://github.com/stevencombs/ChatGauge/blob/main/CHANGELOG.md) for details.
+
+            Made by retroCombs · YouTube: [@retroCombs](https://www.youtube.com/@retroCombs) and [@retroCombs-tech](https://www.youtube.com/@retroCombs-tech) · Tips: [PayPal](https://paypal.me/stevencombs)
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChatGauge-${{ steps.version.outputs.version }}
+          path: dist/*.zip*
