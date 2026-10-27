@@ -1,9 +1,26 @@
 import AppKit
 import ChatGaugeCore
 
-// Placeholder entry point while Core lands (Milestone 2 replaces it with the menu bar app).
-if CommandLine.arguments.contains("--version") {
-    print("ChatGauge \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev")")
+let args = CommandLine.arguments.dropFirst()
+if args.contains("--version") || args.contains("-v") {
+    print("ChatGauge \(AppInfo.version) (\(AppInfo.build))")
     exit(0)
 }
-print("ChatGauge core ready. Tier: \(TierDetector.detect().rawValue)")
+if args.contains("--help") || args.contains("-h") {
+    print("""
+    ChatGauge \(AppInfo.version): a local chat window for your menu bar, powered by Ollama.
+
+    Usage: open ChatGauge.app
+      --version   Print the version and exit
+      --help      Show this help
+    """)
+    exit(0)
+}
+
+MainActor.assumeIsolated {
+    let app = NSApplication.shared
+    let delegate = AppDelegate()
+    app.delegate = delegate
+    app.setActivationPolicy(.accessory)
+    withExtendedLifetime(delegate) { app.run() }
+}
