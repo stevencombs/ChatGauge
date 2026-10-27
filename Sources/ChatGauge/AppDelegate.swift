@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     let actions = AppActions()
     let hub = FeatureHub()
     let instructions = InstructionsStore()
+    lazy var chats = ChatStore(settingsStore: settingsStore)
 
     private var statusItem: NSStatusItem!
     private let popover = NSPopover()
@@ -64,6 +65,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     /// Hook for later features (instructions, chats, voice, settings, updates).
     func configureFeatures() {
         configureInstructions()
+        configureChats()
+    }
+
+    private func configureChats() {
+        let store = chats
+        engine.onConversationUpdated = { [weak self] c in
+            guard let self, let saved = store.save(c) else { return }
+            // Remember the saved image names so the next save doesn't rewrite them.
+            guard self.engine.conversation.id == saved.id else { return }
+            for m in saved.messages where !m.imageFiles.isEmpty {
+                if let i = self.engine.conversation.messages.firstIndex(where: { $0.id == m.id }) {
+                    self.engine.conversation.messages[i].imageFiles = m.imageFiles
+                }
+            }
+        }
+        let window = HostedWindow(title: "ChatGauge", size: NSSize(width: 980, height: 680), autosave: "ChatGaugeChatWindow", resizable: true) { [weak self] in
+            guard let self else { return AnyView(EmptyView()) }
+            return AnyView(ChatWindowView(engine: self.engine, store: store, actions: self.actions, hub: self.hub))
+        }
+        chatWindow = window
+        chatWindowOpener = { [weak self] in
+            window.show()
+            let t = self?.engine.conversation.title ?? ""
+            window.nsWindow?.title = t.isEmpty ? "ChatGauge" : "ChatGauge — \(t)"
+        }
+        engine.$conversation.map(\.title).removeDuplicates()
+            .sink { title in
+                DispatchQueue.main.async { window.nsWindow?.title = title.isEmpty ? "ChatGauge" : "ChatGauge — \(title)" }
+            }
+            .store(in: &cancellables)
+        willQuit = { [weak self] in
+            guard let self else { return }
+            if self.engine.isStreaming { self.engine.stop() }
+            if !self.engine.conversation.isEmpty { store.save(self.engine.conversation) }
+        }
     }
 
     private func configureInstructions() {
@@ -175,17 +211,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     /// ⌘V with an image on the pasteboard attaches it (text pastes as usual).
     private func installPasteMonitor() {
         pasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            MainActor.assumeIsolated {
+            let isPaste = event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command
+                && event.charactersIgnoringModifiers?.lowercased() == "v"
+            guard isPaste else { return event }
+            let handled = MainActor.assumeIsolated { () -> Bool in
                 guard let self,
-                      event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
-                      event.charactersIgnoringModifiers?.lowercased() == "v",
                       self.popover.isShown || (self.chatWindow?.nsWindow?.isKeyWindow ?? false),
-                      Attachment.pasteboardHasImage() else { return event }
+                      Attachment.pasteboardHasImage() else { return false }
                 let found = Attachment.fromPasteboard()
-                guard !found.isEmpty else { return event }
+                guard !found.isEmpty else { return false }
                 self.engine.addAttachments(found)
-                return nil
+                return true
             }
+            return handled ? nil : event
         }
     }
 

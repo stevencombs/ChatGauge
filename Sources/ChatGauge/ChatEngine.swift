@@ -88,7 +88,7 @@ final class ChatEngine: ObservableObject {
     func schedule(interval: TimeInterval) {
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { Task { await self?.refresh() } }
+            MainActor.assumeIsolated { _ = Task { await self?.refresh() } }
         }
     }
 

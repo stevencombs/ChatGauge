@@ -17,5 +17,9 @@ enum Palette {
         }
     }
 
+    static let green = Color(nsColor: .systemGreen)
+    static let orange = Color(nsColor: .systemOrange)
+    static let red = Color(nsColor: .systemRed)
+
     static func color(_ level: EngineStatus.Level) -> Color { Color(nsColor: nsColor(level)) }
 }
