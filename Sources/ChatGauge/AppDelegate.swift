@@ -35,7 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         configureFeatures()
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.autosaveName = "ChatGaugeStatusItem"
+        if UISelfTest.outputFolder == nil { statusItem.autosaveName = "ChatGaugeStatusItem" }
         if let button = statusItem.button {
             button.imagePosition = .imageLeading
             button.action = #selector(togglePopover(_:))
@@ -64,6 +64,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
         installPasteMonitor()
         engine.start()
+        if let out = UISelfTest.outputFolder {
+            UISelfTest.run(out: out, open: { [weak self] in self?.showPopover() },
+                           view: { [weak self] in self?.popover.contentViewController?.view }, engine: engine)
+        }
     }
 
     /// Hook for later features (instructions, chats, voice, settings, updates).
