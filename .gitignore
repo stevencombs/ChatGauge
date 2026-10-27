@@ -1,0 +1,16 @@
+# SwiftPM / build output
+.build/
+.swiftpm/
+dist/
+*.xcodeproj/
+xcuserdata/
+DerivedData/
+Package.resolved
+
+# macOS
+.DS_Store
+
+# Never commit credentials
+auth.json
+*.token
+.env
