@@ -274,6 +274,7 @@ struct ImageDropModifier: ViewModifier {
                 }
             }
             .onDrop(of: [.fileURL, .image], isTargeted: $targeted) { providers in
+                engine.lastDropAt = Date()
                 for p in providers {
                     if p.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
                         _ = p.loadDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { data, _ in

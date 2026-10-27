@@ -47,7 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         }
         updateStatusItem()
 
-        popover.behavior = PopoverPolicy(pinned: settingsStore.settings.pinPopover).transient ? .transient : .applicationDefined
+        popover.behavior = PopoverPolicy(pinned: settingsStore.settings.pinPopover).semitransient ? .semitransient : .applicationDefined
         popover.animates = false
         popover.delegate = self
         let host = NSHostingController(rootView: PopoverView(engine: engine, settingsStore: settingsStore, actions: actions, hub: hub))
@@ -228,11 +228,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         }
     }
 
-    func showPopover() {
+    /// activate: false when a drag opens it (Finder keeps the drag; the popover only needs to be on screen).
+    func showPopover(activate: Bool = true) {
         guard let button = statusItem.button else { return }
-        AppActivation.activateNow()
+        if activate { AppActivation.activateNow() }
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-        popover.contentViewController?.view.window?.makeKeyAndOrderFront(nil)
+        if activate { popover.contentViewController?.view.window?.makeKeyAndOrderFront(nil) }
         if popoverPolicy.closesOnOutsideClick { startOutsideClickMonitor() }
         engine.schedule(interval: 10)
         Task {
@@ -243,10 +244,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
 
     var popoverPolicy: PopoverPolicy { PopoverPolicy(pinned: settingsStore.settings.pinPopover) }
 
-    /// Pinned: application-defined (stays open across clicks in Finder). Unpinned: transient, like ClipGauge.
+    /// Pinned: application-defined (stays open across any clicks elsewhere). Unpinned: semi-transient + drag-aware
+    /// outside-click monitor (a plain click elsewhere closes it; pressing and dragging a file doesn't).
     private func applyPin(_ pinned: Bool) {
         let policy = PopoverPolicy(pinned: pinned)
-        popover.behavior = policy.transient ? .transient : .applicationDefined
+        popover.behavior = policy.semitransient ? .semitransient : .applicationDefined
         if policy.closesOnOutsideClick {
             if popover.isShown { startOutsideClickMonitor() }
         } else {
@@ -256,7 +258,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
 
     // MARK: Attach and drop
 
-    /// The paperclip. From the transient popover the picker would steal focus and close it, so (as in ClipGauge)
+    /// The paperclip. A picker from the popover would take focus from it, so (as in ClipGauge)
     /// the chat moves to the chat window, which stays put, and the picker opens there as a sheet.
     func attachImages() {
         let fromPopover = popover.isShown
@@ -278,11 +280,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         }
     }
 
-    /// Images dropped on the menu bar icon: into the pinned popover if it's open, else into the chat window.
+    /// Images dropped on the menu bar icon: into the popover if it's open (a drag over the icon opens it), else the chat window.
     func receiveDropped(_ found: [Attachment]) {
         guard !found.isEmpty else { return }
         engine.addAttachments(found)
-        if popover.isShown && !popoverPolicy.closesOnOutsideClick { return }
+        if popover.isShown { return }   // the popover is open (the drag opened it, or it was already): it's there
         showChatWindow()
     }
 
@@ -305,7 +307,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         guard dragHasImage(sender) else { return [] }
         statusItem.button?.highlight(true)
+        beginIconDrag()
         return .copy
+    }
+
+    // MARK: Drag opens the popover
+
+    private var dragOpenedPopover = false
+    private var dragStart = Date.distantPast
+    private var dragAttachmentsBefore = 0
+    private var dragWatch: Timer?
+
+    /// An image drag entered the menu bar icon: open the popover (if closed) so it can be dropped on the chat, and
+    /// keep it open for the whole drag. When the mouse button comes up: close it again only if it was opened by this
+    /// drag and nothing was dropped (on the icon or the chat).
+    func beginIconDrag() {
+        guard dragWatch == nil else { return }
+        dragStart = Date()
+        dragAttachmentsBefore = engine.attachments.count
+        dragOpenedPopover = !popover.isShown
+        if dragOpenedPopover { showPopover(activate: false) }
+        dragWatch = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, NSEvent.pressedMouseButtons & 1 == 0 else { return }
+                self.dragWatch?.invalidate(); self.dragWatch = nil
+                // The chat view's drop loads the image asynchronously; give it a moment before deciding.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { self.endIconDrag() }
+            }
+        }
+    }
+
+    private func endIconDrag() {
+        if DragOpenedPopover.shouldClose(openedByDrag: dragOpenedPopover, dropAt: engine.lastDropAt, dragStart: dragStart,
+                                         attachmentsBefore: dragAttachmentsBefore, attachmentsNow: engine.attachments.count),
+           popover.isShown {
+            popover.performClose(nil)
+        }
+        dragOpenedPopover = false
     }
     func draggingExited(_ sender: NSDraggingInfo?) { statusItem.button?.highlight(false) }
     func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool { true }
@@ -313,6 +351,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         statusItem.button?.highlight(false)
         let found = droppedAttachments(sender)
         guard !found.isEmpty else { return false }
+        engine.lastDropAt = Date()
         DispatchQueue.main.async { self.receiveDropped(found) }
         return true
     }
@@ -328,7 +367,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         try? rep?.representation(using: .png, properties: [:])?.write(to: png)
         engine.attachments.removeAll()
 
-        // 1. Attach from the (transient) popover: the chat moves to the chat window and the picker is a sheet there.
+        // 1. Attach from the popover: the chat moves to the chat window and the picker is a sheet there.
         showPopover(); await wait(1)
         attachImages(); await wait(1.5)
         let w = chatWindow?.nsWindow
@@ -357,7 +396,67 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         receiveDropped(found); await wait(0.5)
         log += "   \(yn(popover.isShown && engine.attachments.count == 2)) icon drop with pinned popover adds to popover\n"
         settingsStore.update { $0.pinPopover = false }; await wait(0.5)
-        log += "   \(yn(popover.behavior == .transient && outsideClickMonitor != nil)) unpin restores transient + monitor\n"
+        log += "   \(yn(popover.behavior == .semitransient && outsideClickMonitor != nil)) unpin restores semi-transient + monitor\n"
+        popover.performClose(nil); await wait(0.5)
+        engine.attachments.removeAll()
+
+        // 4. Switching to another app (what happens when you click Finder to pick up a file).
+        let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first
+        func switchToFinder() async {
+            // macOS 14+ cooperative activation: hand activation to Finder, as a click in Finder would.
+            if let finder { NSApp.yieldActivation(to: finder); finder.activate() }
+            await wait(1.5)
+        }
+        popover.behavior = .transient
+        showPopover(); await wait(1)
+        await switchToFinder()
+        let transientShown = popover.isShown
+        let switched = finder?.isActive ?? false
+        func yn2(_ b: Bool) -> String { switched ? yn(b) : "INFO (Finder didn't take activation in this test session)" }
+        log += "   \(yn2(!transientShown)) OLD .transient: switching to Finder closes the popover (shown=\(transientShown), finder active=\(finder?.isActive ?? false)) <- the bug\n"
+        popover.performClose(nil); applyPin(false); await wait(0.5)
+        showPopover(); await wait(1)
+        await switchToFinder()
+        log += "   \(yn2(popover.isShown)) NEW .semitransient: switching to Finder keeps it open (finder active=\(finder?.isActive ?? false))\n"
+
+        // 5. Outside clicks in another app (fed through the same handler the global monitor uses).
+        outsideMouse(.down, x: 100, y: 100); outsideMouse(.dragged, x: 160, y: 120); outsideMouse(.up, x: 600, y: 20)
+        await wait(0.5)
+        log += "   \(yn(popover.isShown)) press-and-drag in another app keeps it open\n"
+        outsideMouse(.down, x: 300, y: 300); outsideMouse(.up, x: 300, y: 300)
+        await wait(0.8)
+        log += "   \(yn(!popover.isShown)) plain click in another app closes it\n"
+
+        // 6. A file drag enters the menu bar icon (the same call draggingEntered makes), popover closed.
+        beginIconDrag(); await wait(0.3)
+        log += "   \(yn(popover.isShown)) drag entering the icon opens the popover\n"
+        await wait(1.5)
+        log += "   \(yn(!popover.isShown)) drag ended with no drop: popover closes again\n"
+        beginIconDrag(); await wait(0.1)
+        // Drop on the popover's chat area (what ImageDropModifier does).
+        engine.lastDropAt = Date(); engine.addAttachments(found)
+        if let v = popover.contentViewController?.view { log += UISelfTest.snapshot("7-drag-opened", view: v, engine: engine, out: out) }
+        await wait(1.5)
+        log += "   \(yn(popover.isShown && engine.attachments.count == 1)) drop on the chat area: popover stays open with the image\n"
+        chatWindow?.nsWindow?.orderOut(nil)
+        beginIconDrag(); await wait(0.1)
+        receiveDropped(found); await wait(1.5)
+        log += "   \(yn(popover.isShown && engine.attachments.count == 2 && chatWindow?.nsWindow?.isVisible != true)) drop on the icon: goes into the open popover\n"
+
+        // 7. Esc closes it.
+        showPopover(); await wait(0.8)
+        if let pw = popover.contentViewController?.view.window,
+           let esc = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                      windowNumber: pw.windowNumber, context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}",
+                                      isARepeat: false, keyCode: 53) {
+            NSApp.sendEvent(esc)
+        }
+        await wait(0.8)
+        log += "   \(yn(!popover.isShown)) Esc closes the popover\n"
+        togglePopover(nil); await wait(0.8)
+        let opened = popover.isShown
+        togglePopover(nil); await wait(0.8)
+        log += "   \(yn(opened && !popover.isShown)) icon click / hotkey (togglePopover) opens and closes it\n"
         return log
     }
 
@@ -368,9 +467,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
 
     private func startOutsideClickMonitor() {
         stopOutsideClickMonitor()
-        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            MainActor.assumeIsolated { self?.popover.performClose(nil) }
+        clickTracker = OutsideClickTracker()
+        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp, .rightMouseDown]) { [weak self] e in
+            let kind: OutsideClickTracker.Event
+            switch e.type {
+            case .leftMouseDown: kind = .down
+            case .leftMouseDragged: kind = .dragged
+            case .leftMouseUp: kind = .up
+            default: kind = .rightDown
+            }
+            let p = NSEvent.mouseLocation
+            MainActor.assumeIsolated { self?.outsideMouse(kind, x: p.x, y: p.y) }
         }
+    }
+
+    private var clickTracker = OutsideClickTracker()
+
+    /// A mouse event in another app while the popover is open (also called by the self-test).
+    func outsideMouse(_ kind: OutsideClickTracker.Event, x: Double, y: Double) {
+        guard popover.isShown, popoverPolicy.closesOnOutsideClick, dragWatch == nil else { return }
+        if clickTracker.handle(kind, x: x, y: y) { popover.performClose(nil) }
     }
 
     private func stopOutsideClickMonitor() {
@@ -381,6 +497,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     /// ⌘V with an image on the pasteboard attaches it (text pastes as usual).
     private func installPasteMonitor() {
         pasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            // Esc closes the popover (it no longer closes by itself when you switch apps).
+            if event.keyCode == 53, event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty {
+                let closed = MainActor.assumeIsolated { () -> Bool in
+                    guard let self, self.popover.isShown, event.window === self.popover.contentViewController?.view.window else { return false }
+                    self.popover.performClose(nil)
+                    return true
+                }
+                if closed { return nil }
+            }
             let isPaste = event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command
                 && event.charactersIgnoringModifiers?.lowercased() == "v"
             guard isPaste else { return event }

@@ -5,6 +5,8 @@ import Combine
 /// Talks to the local Ollama: server state, installed models, loading, and streaming replies.
 @MainActor
 final class ChatEngine: ObservableObject {
+    /// When an image was last dropped on a chat view (set at once, before the image finishes loading).
+    var lastDropAt: Date?
     @Published private(set) var status: EngineStatus = .checking
     @Published private(set) var models: [ModelInfo] = []
     @Published private(set) var loaded: [LoadedModel] = []
