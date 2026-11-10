@@ -268,7 +268,7 @@ private struct ModelServerPane: View {
                 ForEach(Array(engine.models.enumerated()), id: \.element.id) { i, m in
                     if i > 0 { Divider() }
                     PrefRow(label: m.name,
-                            detail: "\(ModelCatalog.description(for: m)) · \(ByteCountFormatter.string(fromByteCount: m.size, countStyle: .file))\(m.supportsVision ? " · vision" : "")") {
+                            detail: ModelCatalog.description(for: m)) {
                         Button("Remove…") { confirmRemove(m) }
                             .disabled(engine.isRemoving || engine.isPulling || engine.streamingModel == m.name)
                     }
@@ -284,7 +284,7 @@ private struct ModelServerPane: View {
             ForEach(Array(ModelCatalog.uncensored.enumerated()), id: \.element.id) { i, e in
                 if i > 0 { Divider() }
                 let installed = engine.models.contains { $0.name == e.name }
-                PrefRow(label: e.name, detail: "\(e.blurb) · \(ByteCountFormatter.string(fromByteCount: e.bytes, countStyle: .file))") {
+                PrefRow(label: e.name, detail: e.blurb) {
                     HStack(spacing: 8) {
                         if engine.pullTarget == e.name, let prog = engine.pullProgress {
                             ProgressView(value: prog).frame(width: 80)

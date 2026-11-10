@@ -386,7 +386,7 @@ struct ModelsStep: View {
                 ForEach(Array(ModelCatalog.uncensored.enumerated()), id: \.element.id) { i, e in
                     if i > 0 { Divider() }
                     HStack(spacing: 10) {
-                        JobView(name: e.name, detail: "\(size(e.bytes)) · \(e.blurb)",
+                        JobView(name: e.name, detail: e.blurb,
                                 job: model.installedChat.contains(e.name) ? .done("Installed") : (model.pulls[e.name] ?? .idle))
                         if model.installedChat.contains(e.name) {
                             Text("Installed").foregroundStyle(.secondary)
@@ -438,7 +438,7 @@ struct ModelsStep: View {
                 if on { model.chatPicks.insert(o.name) } else { model.chatPicks.remove(o.name) }
             }))
             .labelsHidden().disabled(model.downloading)
-            JobView(name: o.name + (recommended ? "  (recommended)" : ""), detail: "\(size(o.bytes)) · \(o.note)",
+            JobView(name: o.name + (recommended ? "  (recommended)" : ""), detail: o.note,
                     job: model.installedChat.contains(o.name) ? .done("Installed") : (model.pulls[o.name] ?? .idle))
         }
     }

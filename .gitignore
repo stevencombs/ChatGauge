@@ -15,3 +15,10 @@ auth.json
 *.token
 .env
 .selftest/
+
+# Local packages, self-test output, personal chats
+.selftest/
+*.app
+.src.tgz
+.screens*.tgz
+*.zip.sha256

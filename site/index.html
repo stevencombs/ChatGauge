@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>ChatGauge · Local chat, vision, and voice on your Mac</title>
+<meta name="description" content="ChatGauge is a free, open-source Mac app for local chat with vision and voice. Conversations stay on this Mac. Install with Homebrew.">
+<meta property="og:title" content="ChatGauge · Local chat, vision, and voice on your Mac">
+<meta property="og:description" content="A free, open-source Mac app for local chat with vision and voice. Nothing leaves this Mac.">
+<link rel="canonical" href="https://stevencombs.github.io/ChatGauge/">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stevencombs.github.io/ChatGauge/">
+<meta property="og:image" content="https://stevencombs.github.io/ChatGauge/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="ChatGauge: Local chat, vision, and voice on your Mac.">
+<meta name="twitter:image" content="https://stevencombs.github.io/ChatGauge/assets/og-image.png">
+<meta name="twitter:site" content="@StevenCombs">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<link rel="apple-touch-icon" href="assets/icon-256.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="#top"><img src="assets/icon-256.png" alt="" width="32" height="32"><span>ChatGauge</span></a>
+    <nav class="nav-links" aria-label="Sections">
+      <a href="#features">Features</a>
+      <a href="#setup">Setup guide</a>
+      <a href="#install">Install</a>
+      <a href="#faq">FAQ</a>
+      <a href="#apps">More apps</a>
+      <a href="#support">Support</a>
+    </nav>
+    <a class="btn btn-ghost btn-sm" href="https://github.com/stevencombs/ChatGauge">
+      <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      GitHub
+    </a>
+  </div>
+</header>
+
+<main id="top">
+
+<section class="hero">
+  <div class="glow" aria-hidden="true"></div>
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <p class="eyebrow"><span class="dot"></span>v0.1.0 · Free &amp; open source · macOS 14+</p>
+      <h1>Local chat, vision, and voice <span class="grad">on this Mac.</span></h1>
+      <p class="lede">ChatGauge is a menu-bar chat app that talks to a model running on your computer. Your questions, images, and conversations stay here. There is no account and no cloud.</p>
+
+      <div class="cmd" role="group" aria-label="Homebrew install command">
+        <span class="prompt" aria-hidden="true">$</span>
+        <code id="brew-cmd">brew install --cask stevencombs/tap/chatgauge</code>
+        <button class="copy" type="button" data-copy="brew install --cask stevencombs/tap/chatgauge" aria-label="Copy install command">Copy</button>
+      </div>
+      <p class="fine" style="margin-top:10px">The first-run setup guide installs tools and models after you choose them. The cask does not download models for you.</p>
+
+      <div class="cta">
+        <a class="btn btn-primary" href="https://github.com/stevencombs/ChatGauge/releases/latest">
+          <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M7.25 1.75a.75.75 0 011.5 0v7.19l2.22-2.22a.75.75 0 111.06 1.06l-3.5 3.5a.75.75 0 01-1.06 0l-3.5-3.5a.75.75 0 111.06-1.06l2.22 2.22V1.75zM2 13.25a.75.75 0 01.75-.75h10.5a.75.75 0 010 1.5H2.75a.75.75 0 01-.75-.75z"/></svg>
+          Download for Mac
+        </a>
+        <a class="btn btn-ghost" href="https://github.com/stevencombs/ChatGauge">View on GitHub</a>
+      </div>
+      <p class="fine">Native Swift · Apple silicon recommended · MIT licensed · Fully local</p>
+    </div>
+
+    <figure class="hero-shot">
+      <img src="assets/chat-popover.png" width="392" alt="The ChatGauge popover: an empty chat that says “Ask anything, or drop in an image. Runs on this Mac with qwen2.5vl:7b. Nothing leaves your computer.”">
+      <figcaption>The ChatGauge popover. Nothing leaves this Mac.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="features" class="section">
+  <div class="wrap">
+    <header class="sec-head">
+      <p class="kicker">Features</p>
+      <h2>A full local chat app, one click away.</h2>
+      <p>Open the popover from the menu bar, or use the Chat Window for a longer conversation.</p>
+    </header>
+
+    <div class="grid feat-shots">
+      <article class="card shot-card">
+        <div class="shot"><img src="assets/chat-window.png" alt="The Chat Window with a sidebar of pinned and recent chats, a model picker, and the current conversation"></div>
+        <h3>Local chat</h3>
+        <p>Chats are Markdown files on this Mac. Pin, search, group, move, and export them from the Chat Window.</p>
+      </article>
+      <article class="card shot-card">
+        <div class="shot"><img src="assets/vision.png" alt="A Chat Window with an attached image, drop-test.png, ready to send to the vision model"></div>
+        <h3>Vision</h3>
+        <p>Drop or paste an image into a vision model and ask about it. The file stays on this Mac.</p>
+      </article>
+      <article class="card shot-card">
+        <div class="shot"><img src="assets/remove-confirm.png" alt="The Remove confirm step: it names the model, the space it will free, and warns if saved chats use that model"></div>
+        <h3>Model picker &amp; Remove</h3>
+        <p>Pick a model per chat, or set a default for new ones. Optional uncensored vision models install only when you click Install. Remove asks you to confirm, names the model, and shows how much space you will get back.</p>
+      </article>
+    </div>
+
+    <div class="grid" style="margin-top:1.5rem">
+      <article class="card">
+        <h3>Voice</h3>
+        <p>Hold the mic to talk when whisper.cpp is set up. The setup guide can install it for you, or you can skip voice and add it later.</p>
+      </article>
+      <article class="card">
+        <h3>Setup guide</h3>
+        <p>The first time you open ChatGauge, a guide checks Homebrew, lets you pick a models folder, installs the tools you want, and sends a short test prompt. Skip it and come back from Settings any time.</p>
+      </article>
+      <article class="card">
+        <h3>Private by design</h3>
+        <p>Prompts, images, and saved chats do not leave this Mac. ChatGauge has no account and no telemetry. It talks only to the Ollama server you point it at, which also runs locally.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section id="setup" class="section alt">
+  <div class="wrap">
+    <header class="sec-head">
+      <p class="kicker">Setup guide</p>
+      <h2>Get the tools and a model, then start chatting.</h2>
+      <p>ChatGauge does not pull models when you install the app. You choose them in the setup guide or later in Settings.</p>
+    </header>
+    <ol class="reqs" style="max-width:40rem;margin:0 auto">
+      <li>Check whether Homebrew, Ollama, ffmpeg, and whisper.cpp are already on this Mac.</li>
+      <li>Pick a models folder. An external drive is fine.</li>
+      <li>Review the recommended chat model and optional voice model.</li>
+      <li>Optionally install uncensored vision models. They download only when you click Install.</li>
+      <li>Use an Ollama server that is already running, or start one that serves your models folder. ChatGauge will not restart a shared Ollama LaunchAgent.</li>
+      <li>Send a short test prompt, then start chatting.</li>
+    </ol>
+  </div>
+</section>
+
+<section id="install" class="section">
+  <div class="wrap">
+    <header class="sec-head">
+      <p class="kicker">Install</p>
+      <h2>Up and running in a minute.</h2>
+    </header>
+
+    <div class="grid install-grid">
+      <div class="card">
+        <span class="tag">Recommended</span>
+        <h3>Homebrew</h3>
+        <div class="cmd cmd-sm">
+          <code>brew install --cask stevencombs/tap/chatgauge</code>
+          <button class="copy" type="button" data-copy="brew install --cask stevencombs/tap/chatgauge" aria-label="Copy install command">Copy</button>
+        </div>
+        <p>Update later with <code>brew upgrade --cask chatgauge</code>. The cask does not download models; the in-app setup guide handles that.</p>
+      </div>
+      <div class="card">
+        <span class="tag tag-muted">Direct download</span>
+        <h3>GitHub Releases</h3>
+        <p>Download the zip from the latest release, unzip it, and drag <strong>ChatGauge.app</strong> into Applications. Each release lists the zip’s SHA-256. The app is ad-hoc signed and is not notarized, so macOS may ask you to allow it under System Settings › Privacy &amp; Security.</p>
+        <a class="btn btn-ghost btn-sm" href="https://github.com/stevencombs/ChatGauge/releases/latest">Latest release →</a>
+      </div>
+      <div class="card">
+        <span class="tag tag-muted">Requirements</span>
+        <h3>What you need</h3>
+        <ul class="reqs">
+          <li>A Mac running macOS 14 Sonoma or later</li>
+          <li>Apple silicon recommended; Intel Macs work if they have enough RAM</li>
+          <li>16&nbsp;GB RAM is enough for the 3B chat model. 32&nbsp;GB is comfortable for the 7B vision model. The optional 32B model wants 48&nbsp;GB or more</li>
+          <li>Disk space for models (the 7B vision model is about 6&nbsp;GB)</li>
+          <li>Homebrew, if you want the one-line install and in-app tool setup</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="faq" class="section alt">
+  <div class="wrap">
+    <header class="sec-head">
+      <p class="kicker">FAQ</p>
+      <h2>Quick answers.</h2>
+    </header>
+    <div class="grid">
+      <article class="card">
+        <h3>Does anything leave my Mac?</h3>
+        <p>No. ChatGauge is fully local. Prompts, images, and saved chats stay on this computer.</p>
+      </article>
+      <article class="card">
+        <h3>What are the uncensored models?</h3>
+        <p>Two optional vision models in the catalog. They are not installed unless you choose them in Settings or the setup guide.</p>
+      </article>
+      <article class="card">
+        <h3>Can I remove a model later?</h3>
+        <p>Yes. Settings › Model &amp; Server has Remove. You’ll see the model name, how much space it will free, and a warning if saved chats use it. Those chats fall back to your default model the next time you open them.</p>
+      </article>
+      <article class="card">
+        <h3>Will ChatGauge restart my Ollama server?</h3>
+        <p>No. If a shared Ollama LaunchAgent is already running, ChatGauge leaves it alone and talks to that server.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section id="apps" class="section">
+  <div class="wrap">
+    <header class="sec-head">
+      <p class="kicker">More apps from retroCombs</p>
+      <h2>Part of the Gauge family.</h2>
+      <p>Small, native menu bar apps for Mac, built in the open.</p>
+    </header>
+    <div class="grid apps-grid">
+      <div class="card app-card current">
+        <img src="assets/icon-256.png" alt="" width="64" height="64">
+        <div><h3>ChatGauge <span class="soon">You are here</span></h3><p>Local chat with vision and voice, running on this Mac.</p></div>
+      </div>
+      <a class="card app-card" href="https://stevencombs.github.io/GrokGauge/">
+        <img src="assets/grokgauge-icon.png" alt="" width="64" height="64">
+        <div><h3>GrokGauge</h3><p>Your SuperGrok and Grok Bot weekly usage as colored rings in the menu bar.</p><span class="more">Visit the GrokGauge page →</span></div>
+      </a>
+      <a class="card app-card" href="https://stevencombs.github.io/ClipGauge/">
+        <img src="assets/clipgauge-icon.png" alt="" width="64" height="64">
+        <div><h3>ClipGauge</h3><p>Local AI that renames and sorts your video and photo clips in place, with transcripts saved next to them.</p><span class="more">Visit the ClipGauge page →</span></div>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section id="support" class="section alt">
+  <div class="wrap">
+    <div class="support card">
+      <img class="logo" src="assets/retrocombs-logo-160.png" srcset="assets/retrocombs-logo-160.png 1x, assets/retrocombs-logo-512.png 3x" width="96" height="96" alt="retroCombs logo">
+      <div class="support-copy">
+        <h2>Free, and built in the open.</h2>
+        <p>ChatGauge was made by Steven “retroCombs” Combs together with Grok Bot. If it is useful, you can say thanks with a tip.</p>
+      </div>
+      <div class="support-cta">
+        <a class="btn btn-paypal" href="https://paypal.me/stevencombs">Tip via PayPal</a>
+        <a class="btn btn-ghost" href="https://github.com/stevencombs/ChatGauge">★ Star on GitHub</a>
+        <a class="link" href="https://github.com/stevencombs/ChatGauge/issues">Report a bug or request a feature</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="footer">
+  <div class="wrap foot-grid foot-4">
+    <div>
+      <a class="brand" href="#top"><img src="assets/icon-256.png" alt="" width="28" height="28"><span>ChatGauge</span></a>
+      <p class="fine">Made by Steven “retroCombs” Combs with Grok Bot.<br>Contact: <a href="mailto:retroCombs@icloud.com">retroCombs@icloud.com</a></p>
+    </div>
+    <div class="foot-links">
+      <h4>Project</h4>
+      <a href="https://github.com/stevencombs/ChatGauge">GitHub</a>
+      <a href="https://github.com/stevencombs/ChatGauge/releases">Releases</a>
+      <a href="https://github.com/stevencombs/ChatGauge/blob/main/CHANGELOG.md">Changelog</a>
+    </div>
+    <div class="foot-links">
+      <h4>Apps</h4>
+      <a href="#top">ChatGauge</a>
+      <a href="https://stevencombs.github.io/GrokGauge/">GrokGauge</a>
+      <a href="https://stevencombs.github.io/ClipGauge/">ClipGauge</a>
+    </div>
+    <div class="foot-links">
+      <h4>retroCombs</h4>
+      <a href="https://youtube.com/@retroCombs">YouTube @retroCombs</a>
+      <a href="https://youtube.com/@retroCombs-tech">YouTube @retroCombs-tech</a>
+      <a href="https://x.com/StevenCombs">X @StevenCombs</a>
+      <a href="https://www.retrocombs.com">retrocombs.com</a>
+    </div>
+  </div>
+  <div class="wrap disclaimer">
+    <p>ChatGauge is fully local and is not affiliated with Ollama, Alibaba, or any model vendor. Use at your own risk.</p>
+    <p>MIT License © 2026 Steven Combs (retroCombs)</p>
+  </div>
+</footer>
+
+<script>
+document.querySelectorAll('.copy').forEach(function (b) {
+  b.addEventListener('click', function () {
+    var t = b.getAttribute('data-copy');
+    var done = function () { b.textContent = 'Copied'; b.classList.add('ok'); setTimeout(function () { b.textContent = 'Copy'; b.classList.remove('ok'); }, 1600); };
+    if (navigator.clipboard) { navigator.clipboard.writeText(t).then(done, done); }
+    else { var a = document.createElement('textarea'); a.value = t; document.body.appendChild(a); a.select(); try { document.execCommand('copy'); } catch (e) {} a.remove(); done(); }
+  });
+});
+</script>
+</body>
+</html>

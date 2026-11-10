@@ -365,14 +365,8 @@ struct ModelChip: View {
 
     @ViewBuilder private func label(for row: ModelMenuRow, checked: Bool) -> some View {
         let mark = checked ? "✓ " : ""
-        let vision = row.supportsVision ? " · vision" : ""
-        let size: String = {
-            if case .installed(let m, _) = row, m.size > 0 {
-                return " · " + MemoryStats.gb(m.size)
-            }
-            return ""
-        }()
-        Text(mark + row.name + vision + size + " — " + row.blurb)
+        let vision = row.supportsVision && !row.blurb.lowercased().contains("vision") ? " · vision" : ""
+        Text(mark + row.name + vision + " — " + row.blurb)
     }
 }
 

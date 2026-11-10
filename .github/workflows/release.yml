@@ -12,7 +12,7 @@ jobs:
   release:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -42,7 +42,7 @@ jobs:
 
       - name: Publish GitHub release
         if: github.ref_type == 'tag'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/ChatGauge-${{ steps.version.outputs.version }}.zip
@@ -54,7 +54,7 @@ jobs:
             Made by retroCombs · YouTube: [@retroCombs](https://www.youtube.com/@retroCombs) and [@retroCombs-tech](https://www.youtube.com/@retroCombs-tech) · Tips: [PayPal](https://paypal.me/stevencombs)
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ChatGauge-${{ steps.version.outputs.version }}
           path: dist/*.zip*
