@@ -47,5 +47,5 @@ export CHATGAUGE_SETUP_BIN="$ROOT/bin" CHATGAUGE_SETUP_WHISPER_BASE="http://127.
 python3 scripts/dev/mock_ollama.py $PORT 2>"$ROOT/mock.log" & MOCK=$!
 trap 'kill $MOCK 2>/dev/null || true' EXIT
 sleep 0.5
-CFFIXED_USER_HOME="$ROOT/home" HOME="$ROOT/home" CHATGAUGE_UI_SELFTEST="$ROOT/out" perl -e 'alarm 200; exec @ARGV' "$BIN" >"$ROOT/app.log" 2>&1 || true
+CFFIXED_USER_HOME="$ROOT/home" HOME="$ROOT/home" CHATGAUGE_UI_SELFTEST="$ROOT/out" perl -e 'alarm 420; exec @ARGV' "$BIN" >"$ROOT/app.log" 2>&1 || true
 cat "$ROOT/out/report.txt" 2>/dev/null || { echo "no report"; tail -20 "$ROOT/app.log"; }

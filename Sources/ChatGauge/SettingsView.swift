@@ -89,7 +89,7 @@ struct SettingsView: View {
 
     @ViewBuilder private var page: some View {
         switch router.tab {
-        case .model: ModelServerPane(engine: deps.engine, store: settingsStore, openSetup: deps.hub.openSetup)
+        case .model: ModelServerPane(engine: deps.engine, store: settingsStore, chats: deps.chats, openSetup: deps.hub.openSetup)
         case .chat: ChatPane(store: settingsStore, chats: deps.chats, voice: deps.voice, engine: deps.engine)
         case .menubar: MenuBarPane(store: settingsStore, login: deps.launchAtLogin)
         case .updates:
@@ -156,12 +156,22 @@ private struct SettingsFooter: View {
 private struct ModelServerPane: View {
     @ObservedObject var engine: ChatEngine
     @ObservedObject var store: SettingsStore
+    @ObservedObject var chats: ChatStore
     var openSetup: () -> Void
     @ViewState private var ownAgent = OwnAgentControl.installed
     @ViewState private var ownAgentMessage: String?
 
     private var s: ChatSettings { store.settings }
     private var loc: ModelsLocation { engine.location }
+
+    private func chatCount(using model: String) -> Int {
+        chats.summaries.filter { $0.model == model }.count
+    }
+
+    private var freeSpaceText: String {
+        guard let b = loc.freeBytes else { return "Free space on drive: unknown" }
+        return "Free space on drive: " + ByteCountFormatter.string(fromByteCount: b, countStyle: .file)
+    }
 
     var body: some View {
         PrefGroup(title: "Models folder",
@@ -185,6 +195,7 @@ private struct ModelServerPane: View {
                     Circle().fill(Palette.color(availabilityLevel)).frame(width: 8, height: 8)
                     Text(availabilityText).font(.caption).foregroundStyle(.secondary)
                 }
+                Text(freeSpaceText).font(.caption).foregroundStyle(.secondary)
             }
             .padding(.vertical, 6)
             Divider()
@@ -219,12 +230,14 @@ private struct ModelServerPane: View {
             PrefRow(label: "Chat model", detail: inUseDetail) {
                 Picker("", selection: Binding(get: { s.model }, set: { engine.choose(model: $0) })) {
                     Text("Automatic (RAM tier)").tag(ModelChoice.automatic)
-                    ForEach(engine.models) { m in Text(m.name).tag(ModelChoice.named(m.name)) }
+                    ForEach(engine.models) { m in
+                        Text("\(m.name) — \(ModelCatalog.description(for: m))").tag(ModelChoice.named(m.name))
+                    }
                     if let n = s.model.name, !engine.models.contains(where: { $0.name == n }) {
                         Text("\(n) (not installed)").tag(ModelChoice.named(n))
                     }
                 }
-                .labelsHidden().frame(width: 230)
+                .labelsHidden().frame(width: 280)
             }
             Divider()
             PrefToggle(label: "Keep model loaded",
@@ -245,6 +258,48 @@ private struct ModelServerPane: View {
                     ForEach(RAMTier.allCases, id: \.rawValue) { t in Text(t.title).tag(t.rawValue) }
                 }
                 .labelsHidden().frame(width: 200)
+            }
+        }
+
+        PrefGroup(title: "Installed models", footer: freeSpaceText) {
+            if engine.models.isEmpty {
+                Text("No models on this server yet.").foregroundStyle(.secondary).padding(.vertical, 6)
+            } else {
+                ForEach(Array(engine.models.enumerated()), id: \.element.id) { i, m in
+                    if i > 0 { Divider() }
+                    PrefRow(label: m.name,
+                            detail: "\(ModelCatalog.description(for: m)) · \(ByteCountFormatter.string(fromByteCount: m.size, countStyle: .file))\(m.supportsVision ? " · vision" : "")") {
+                        Button("Remove…") { confirmRemove(m) }
+                            .disabled(engine.isRemoving || engine.isPulling || engine.streamingModel == m.name)
+                    }
+                }
+            }
+            if let msg = engine.removeMessage {
+                Text(msg).font(.caption).foregroundStyle(.secondary).padding(.top, 4)
+            }
+        }
+
+        PrefGroup(title: "Optional uncensored models",
+                  footer: "Downloads only when you click Install. Uses the Ollama server that's already running; ChatGauge never restarts it.") {
+            ForEach(Array(ModelCatalog.uncensored.enumerated()), id: \.element.id) { i, e in
+                if i > 0 { Divider() }
+                let installed = engine.models.contains { $0.name == e.name }
+                PrefRow(label: e.name, detail: "\(e.blurb) · \(ByteCountFormatter.string(fromByteCount: e.bytes, countStyle: .file))") {
+                    HStack(spacing: 8) {
+                        if engine.pullTarget == e.name, let prog = engine.pullProgress {
+                            ProgressView(value: prog).frame(width: 80)
+                            Button("Cancel") { engine.cancelPull() }
+                        } else if installed {
+                            Text("Installed").foregroundStyle(.secondary)
+                        } else {
+                            Button("Install…") { confirmPull(e.name, bytes: e.bytes) }
+                                .disabled(engine.isPulling || engine.isRemoving || engine.status == .serverDown || loc.availability() != .ready)
+                        }
+                    }
+                }
+            }
+            if let msg = engine.pullMessage, let t = engine.pullTarget, ModelCatalog.uncensored.contains(where: { $0.name == t }) {
+                Text(msg).font(.caption).foregroundStyle(.secondary).padding(.top, 4)
             }
         }
     }
@@ -276,7 +331,7 @@ private struct ModelServerPane: View {
 
     private var inUseDetail: String {
         let name = engine.preferredModel ?? "none installed"
-        return "In use: \(name) · RAM tier (\(Self.ramGB) GB · \(engine.tier.rawValue))"
+        return "Default for new chats: \(name) · RAM tier (\(Self.ramGB) GB · \(engine.tier.rawValue))"
     }
 
     private func chooseFolder() {
@@ -292,6 +347,35 @@ private struct ModelServerPane: View {
             $0.modelsPath = url.path
             $0.modelsLocation = url.path.hasPrefix("/Volumes/") ? .external : .local
         }
+    }
+
+    private func confirmPull(_ model: String, bytes: Int64) {
+        let a = NSAlert()
+        a.messageText = "Install \(model)?"
+        let size = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+        let lines = ModelCatalog.pullPlan(model: model, serverURL: s.serverURL).joined(separator: "\n")
+        a.informativeText = "This will run:\n\n\(lines)\n\nAbout \(size) into \(DiagnosticsReport.scrub(loc.path)). Nothing downloads until you click Install."
+        a.addButton(withTitle: "Install")
+        a.addButton(withTitle: "Cancel")
+        if a.runModal() == .alertFirstButtonReturn { engine.pull(model) }
+    }
+
+    private func confirmRemove(_ m: ModelInfo) {
+        let count = chatCount(using: m.name)
+        let plan = engine.removalPlan(for: m.name, chatCount: count)
+        let a = NSAlert()
+        a.messageText = "Remove \(m.name)?"
+        var info = "This frees about \(plan.freeLabel).\n\nThis will run:\n\n" + plan.lines.joined(separator: "\n")
+        if let w = plan.warning { info += "\n\n" + w }
+        a.informativeText = info
+        if plan.block != nil {
+            a.addButton(withTitle: "OK")
+            _ = a.runModal()
+            return
+        }
+        a.addButton(withTitle: "Remove")
+        a.addButton(withTitle: "Cancel")
+        if a.runModal() == .alertFirstButtonReturn { engine.removeModel(m.name, chatCount: count) }
     }
 }
 

@@ -5,6 +5,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 MODEL = "qwen2.5vl:7b"
 loaded = []
+INSTALLED = {MODEL}
+
 # A fake whisper ggml file for the setup self-test (served under /whisper/, with Hugging Face's X-Linked-Etag hash).
 WHISPER = bytes((i * 7 + 3) % 251 for i in range(96_000))
 WHISPER_SHA = hashlib.sha256(WHISPER).hexdigest()
@@ -32,9 +34,21 @@ class H(BaseHTTPRequestHandler):
             except (BrokenPipeError, ConnectionResetError): pass
             return
         if self.path == "/api/version": return self._json({"version": "0.40.11"})
-        if self.path == "/api/tags": return self._json({"models": [{"name": MODEL, "model": MODEL, "size": 6000000000,
-            "details": {"family": "qwen25vl", "parameter_size": "8.3B"}, "capabilities": ["completion", "vision"]}]})
+        if self.path == "/api/tags":
+            models = []
+            for n in sorted(INSTALLED):
+                models.append({"name": n, "model": n, "size": 6000000000 if "32b" not in n else 21000000000,
+                    "details": {"family": "qwen25vl", "parameter_size": "8.3B"}, "capabilities": ["completion", "vision"]})
+            return self._json({"models": models})
         if self.path == "/api/ps": return self._json({"models": [{"name": m, "model": m, "size": 6000000000, "size_vram": 6000000000} for m in loaded]})
+        self.send_response(404); self.send_header("Content-Length", "0"); self.end_headers()
+    def do_DELETE(self):
+        body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0)) or 0) or b"{}")
+        if self.path == "/api/delete":
+            name = body.get("model", "")
+            INSTALLED.discard(name)
+            if name in loaded: loaded.remove(name)
+            return self._json({"status": "success"})
         self.send_response(404); self.send_header("Content-Length", "0"); self.end_headers()
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
@@ -62,6 +76,7 @@ class H(BaseHTTPRequestHandler):
                     d = os.path.join(root, "manifests", "registry.ollama.ai", "library", name)
                     os.makedirs(d, exist_ok=True)
                     open(os.path.join(d, tag or "latest"), "w").write("{}")
+                INSTALLED.add(body.get("model", MODEL))
                 pl({"status": "success"})
                 self.wfile.write(b"0\r\n\r\n"); self.wfile.flush()
             except (BrokenPipeError, ConnectionResetError): pass

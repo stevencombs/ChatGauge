@@ -425,6 +425,25 @@ final class SetupModel: ObservableObject {
     var missingChat: [String] { chatPicks.sorted().filter { !installedChat.contains($0) } }
     var missingWhisper: String? { whisperPick.flatMap { installedWhisper.contains($0) ? nil : $0 } }
 
+    /// One optional uncensored model: dry run, then pull (via existing server when it serves this folder).
+    func proposeUncensored(_ name: String) {
+        guard SetupCatalog.uncensored[name] != nil else { return }
+        guard !installedChat.contains(name) else { return }
+        guard viaExistingURL != nil || tools[.ollama]?.path != nil else {
+            downloadMessage = "Install Ollama first (step 4)."
+            return
+        }
+        chatPicks.insert(name)
+        let lines = SetupPlan.pull(models: [name], ollama: tools[.ollama]?.path ?? "ollama", folder: folder, viaExisting: viaExistingURL)
+        let bytes = SetupCatalog.uncensored[name]?.bytes ?? 0
+        let total = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+        pending = PendingPlan(title: "Install \(name) (about \(total))", lines: lines,
+                              note: "Downloads to \(folder). Uses the existing Ollama server when it already serves this folder; otherwise a temporary download server on port \(SetupPlan.downloadPort).",
+                              runTitle: "Install") { [weak self] in
+            self?.startDownloads()
+        }
+    }
+
     func proposeDownloads() {
         let chat = missingChat
         let w = missingWhisper

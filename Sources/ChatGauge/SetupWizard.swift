@@ -381,6 +381,24 @@ struct ModelsStep: View {
                     pickRow(o, recommended: o.name == r.defaultChat)
                 }
             }
+            PrefGroup(title: "Optional uncensored models",
+                      footer: "Not selected by default. Each Install shows a dry run and downloads only after you click. Uses the existing Ollama server when it serves this folder.") {
+                ForEach(Array(ModelCatalog.uncensored.enumerated()), id: \.element.id) { i, e in
+                    if i > 0 { Divider() }
+                    HStack(spacing: 10) {
+                        JobView(name: e.name, detail: "\(size(e.bytes)) · \(e.blurb)",
+                                job: model.installedChat.contains(e.name) ? .done("Installed") : (model.pulls[e.name] ?? .idle))
+                        if model.installedChat.contains(e.name) {
+                            Text("Installed").foregroundStyle(.secondary)
+                        } else if model.pulls[e.name]?.isRunning == true {
+                            Button("Cancel") { model.cancelDownloads() }
+                        } else {
+                            Button("Install…") { model.proposeUncensored(e.name) }
+                                .disabled(model.downloading || (model.tools[.ollama]?.path == nil && model.viaExistingURL == nil))
+                        }
+                    }
+                }
+            }
             PrefGroup(title: "Voice model (whisper)", footer: "Saved in \(model.whisperFolder.path).") {
                 Toggle(isOn: Binding(get: { model.whisperPick != nil }, set: { model.whisperPick = $0 ? r.whisper.name : nil })) {
                     VStack(alignment: .leading, spacing: 1) {

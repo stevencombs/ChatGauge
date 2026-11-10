@@ -89,4 +89,13 @@ import Testing
         try Data("# my own notes".utf8).write(to: dir.appendingPathComponent("notes.md"))
         #expect(lib.list().map(\.title) == ["Newer", "Older"])
     }
+
+    @Test func perChatModelInHeader() throws {
+        var c = Self.sample()
+        c.model = "huihui_ai/qwen3-vl-abliterated:8b-instruct"
+        let back = try #require(ChatCodec.parseMarkdown(ChatCodec.markdown(c)))
+        #expect(back.model == "huihui_ai/qwen3-vl-abliterated:8b-instruct")
+        let j = try #require(ChatCodec.parseJSON(ChatCodec.json(c)))
+        #expect(j.model == c.model)
+    }
 }

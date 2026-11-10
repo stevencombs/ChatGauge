@@ -97,8 +97,19 @@ final class ChatEngine: ObservableObject {
     // MARK: Server and models
 
     /// The model in effect for the next message (before any memory fallback).
+    /// Per-chat `conversation.model` wins when that model is still installed; otherwise the Settings default.
     var preferredModel: String? {
-        ModelSelection.preferred(choice: settings.model, tier: tier, rules: rules, installed: models)
+        if let m = conversation.model, models.contains(where: { $0.name == m }) { return m }
+        return ModelSelection.preferred(choice: settings.model, tier: tier, rules: rules, installed: models)
+    }
+
+    /// Models ChatGauge itself loaded (for unload-before-remove).
+    var loadedByMe: Set<String> { ledger.mine }
+
+    /// The model currently streaming a reply, if any.
+    var streamingModel: String? {
+        guard isStreaming else { return nil }
+        return conversation.messages.last(where: { $0.role == .assistant })?.model
     }
 
     var isLoaded: (String) -> Bool { { [loaded] m in loaded.contains { $0.name == m } } }
@@ -214,9 +225,27 @@ final class ChatEngine: ObservableObject {
         return p.terminationStatus == 0
     }
 
+    /// Settings default for new chats.
     func choose(model: ModelChoice) {
         settingsStore.update { $0.model = model }
         recomputeStatus()
+    }
+
+    /// Per-chat model (saved in the chat header). Blocked while a reply streams.
+    func chooseForChat(_ choice: ModelChoice) {
+        guard !isStreaming else { return }
+        switch choice {
+        case .automatic:
+            conversation.model = nil
+        case .named(let n):
+            conversation.model = n
+        }
+        if !attachments.isEmpty, let m = preferredModel,
+           let info = models.first(where: { $0.name == m }), !info.supportsVision {
+            banner = "\(m) can't read images. Pick a vision model (such as qwen2.5vl) in the model menu."
+        }
+        recomputeStatus()
+        if !conversation.isEmpty { onConversationUpdated?(conversation) }
     }
 
     var keepAliveValue: Int { settings.keepsLoaded(tier: tier) ? -1 : 300 }
@@ -272,7 +301,7 @@ final class ChatEngine: ObservableObject {
 
         if conversation.isEmpty {
             conversation.title = Conversation.makeTitle(from: text, hasImage: !images.isEmpty)
-            conversation.model = model
+            if conversation.model == nil { conversation.model = preferred }
             conversation.instructions = instructionsName()
         }
         conversation.messages.append(ChatMessage(role: .user, text: text, images: images))
@@ -434,14 +463,22 @@ final class ChatEngine: ObservableObject {
         }
     }
 
-    // MARK: Pull (only from the Diagnostics button)
+    // MARK: Pull / remove (only from a button the user clicked)
 
     @Published private(set) var pullProgress: Double?
     @Published private(set) var pullMessage: String?
+    @Published private(set) var pullTarget: String?
+    @Published private(set) var removeMessage: String?
     private var pullTask: Task<Void, Never>?
+    private var removeTask: Task<Void, Never>?
 
+    var isPulling: Bool { pullTask != nil }
+    var isRemoving: Bool { removeTask != nil }
+
+    /// Downloads through the existing Ollama server. Never kickstarts or unloads anything.
     func pull(_ model: String) {
-        guard pullTask == nil, let client else { return }
+        guard pullTask == nil, removeTask == nil, let client else { return }
+        pullTarget = model
         pullMessage = "Starting download of \(model)…"
         pullProgress = 0
         pullTask = Task {
@@ -449,17 +486,67 @@ final class ChatEngine: ObservableObject {
                 let (bytes, resp) = try await URLSession.shared.bytes(for: client.pullRequest(model: model))
                 guard (resp as? HTTPURLResponse)?.statusCode == 200 else { throw OllamaError.http((resp as? HTTPURLResponse)?.statusCode ?? 0, nil) }
                 for try await line in bytes.lines {
+                    if Task.isCancelled { break }
                     guard let p = PullProgress.parse(Data(line.utf8)) else { continue }
                     if let e = p.error { pullMessage = e; break }
                     pullMessage = p.status.capitalized
                     if let f = p.fraction { pullProgress = f }
                     if p.status == "success" { pullMessage = "\(model) is installed." }
                 }
+                if Task.isCancelled { pullMessage = "Download cancelled." }
+            } catch is CancellationError {
+                pullMessage = "Download cancelled."
             } catch {
                 pullMessage = "Download failed: \((error as? OllamaError)?.description ?? error.localizedDescription)"
             }
             pullProgress = nil
+            pullTarget = nil
             pullTask = nil
+            await refresh()
+        }
+    }
+
+    func cancelPull() {
+        pullTask?.cancel()
+        pullTask = nil
+        pullProgress = nil
+        pullTarget = nil
+        if pullMessage?.contains("cancelled") != true { pullMessage = "Download cancelled." }
+    }
+
+    /// Builds the Remove dry-run. `chatCount` = saved chats whose header model is this name.
+    func removalPlan(for model: String, chatCount: Int) -> ModelRemoval.Plan {
+        let size = models.first(where: { $0.name == model })?.size ?? ModelCatalog.entry(model)?.bytes ?? 0
+        let loadedNames = Set(loaded.map(\.name))
+        return ModelRemoval.plan(model: model, size: size, loaded: loadedNames, mine: ledger.mine,
+                                 streamingModel: streamingModel, chatCount: chatCount, serverURL: settings.serverURL)
+    }
+
+    /// Unloads (only if ChatGauge loaded it) then DELETE /api/delete. Never kickstarts.
+    func removeModel(_ model: String, chatCount: Int) {
+        guard removeTask == nil, pullTask == nil, let client else { return }
+        let plan = removalPlan(for: model, chatCount: chatCount)
+        if plan.block != nil {
+            removeMessage = plan.warning ?? "Can't remove \(model)."
+            return
+        }
+        removeMessage = "Removing \(model)…"
+        removeTask = Task {
+            do {
+                if plan.unloadFirst {
+                    try await client.keepAlive(model: model, 0, timeout: 5)
+                    ledger.recordUnload(model)
+                }
+                try await client.delete(model: model)
+                if conversation.model == model { conversation.model = nil; recomputeStatus() }
+                if case .named(let n) = settings.model, n == model {
+                    settingsStore.update { $0.model = .automatic }
+                }
+                removeMessage = "Removed \(model) (\(plan.freeLabel) freed)."
+            } catch {
+                removeMessage = "Couldn't remove \(model): \((error as? OllamaError)?.description ?? error.localizedDescription)"
+            }
+            removeTask = nil
             await refresh()
         }
     }

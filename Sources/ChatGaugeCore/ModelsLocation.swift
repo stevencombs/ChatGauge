@@ -68,4 +68,14 @@ public extension ModelsLocation {
         }
         return .ready
     }
+
+    /// Free space on the volume that holds the models folder (nil if unknown or the drive is missing).
+    public var freeBytes: Int64? {
+        let root = volumeRoot ?? path
+        let u = URL(fileURLWithPath: root)
+        guard let vals = try? u.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey, .volumeAvailableCapacityKey]) else { return nil }
+        if let important = vals.volumeAvailableCapacityForImportantUsage, important > 0 { return important }
+        if let avail = vals.volumeAvailableCapacity { return Int64(avail) }
+        return nil
+    }
 }

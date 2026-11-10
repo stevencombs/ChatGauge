@@ -18,6 +18,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
 
     private var statusItem: NSStatusItem!
     private let popover = NSPopover()
+    /// Self-test / same-module helpers.
+    var popoverIsShown: Bool { popover.isShown }
+    var popoverViewForTest: NSView? { popover.contentViewController?.view }
     private var outsideClickMonitor: Any?
     private var pasteMonitor: Any?
     private var cancellables = Set<AnyCancellable>()
@@ -82,7 +85,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
                            extra: { [weak self] out in
                                let a = await self?.selfTestAttachAndDrop(out: out) ?? ""
                                let c = await self?.selfTestChats(out: out) ?? ""
-                               return a + c + (await self?.selfTestSetup(out: out) ?? "")
+                               let setup = await self?.selfTestSetup(out: out) ?? ""
+                               let b15 = await self?.selfTestBuild15(out: out) ?? ""
+                               return a + c + setup + b15
                            })
         }
     }
@@ -186,6 +191,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         actions.attachImages = { [weak self] in self?.attachImages() }
         actions.quit = { NSApp.terminate(nil) }
         actions.openSettings = { [weak self] tab in self?.showSettings(tab: tab) }
+        actions.installModel = { [weak self] name in
+            guard let self else { return }
+            let e = self.engine
+            let bytes = ModelCatalog.entry(name)?.bytes ?? 0
+            let a = NSAlert()
+            a.messageText = "Install \(name)?"
+            let size = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+            let lines = ModelCatalog.pullPlan(model: name, serverURL: e.settings.serverURL).joined(separator: "\n")
+            a.informativeText = "This will run:\n\n\(lines)\n\nAbout \(size). Nothing downloads until you click Install."
+            a.addButton(withTitle: "Install")
+            a.addButton(withTitle: "Cancel")
+            if a.runModal() == .alertFirstButtonReturn { e.pull(name) }
+        }
         actions.openChatWindow = { [weak self] in self?.showChatWindow() }
         actions.openInstructions = { [weak self] in self?.showInstructions() }
         actions.showAbout = { [weak self] in self?.showSettings(tab: "about") }

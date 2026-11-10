@@ -32,7 +32,9 @@ enum UISelfTest {
             await wait(2)
             snap("4-later")
             if let extra { log += await extra(out) }
-            try? log.write(to: out.appendingPathComponent("report.txt"), atomically: true, encoding: .utf8)
+            let reportURL = out.appendingPathComponent("report.txt")
+            try? log.write(to: reportURL, atomically: true, encoding: .utf8)
+            FileHandle.standardError.write(Data("selftest report \(log.count) chars -> \(reportURL.path)\n".utf8))
             exit(0)
         }
     }

@@ -346,6 +346,25 @@ public final class OllamaClient: @unchecked Sendable {
         r.httpBody = try? JSONSerialization.data(withJSONObject: ["model": model, "stream": true])
         return r
     }
+
+    /// /api/delete request body (only ever sent from a Remove button the user clicked).
+    public func deleteRequest(model: String) -> URLRequest {
+        var r = URLRequest(url: base.appendingPathComponent("api/delete"), timeoutInterval: 120)
+        r.httpMethod = "DELETE"
+        r.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        r.httpBody = try? JSONSerialization.data(withJSONObject: ["model": model])
+        return r
+    }
+
+    /// Runs DELETE /api/delete and throws on a non-200 response.
+    public func delete(model: String) async throws {
+        let (d, resp) = try await session.data(for: deleteRequest(model: model))
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(code) else {
+            let err = (try? JSONSerialization.jsonObject(with: d) as? [String: Any])?["error"] as? String
+            throw OllamaError.http(code, err)
+        }
+    }
 }
 
 /// Pull progress line from /api/pull.

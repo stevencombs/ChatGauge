@@ -149,7 +149,7 @@ struct ChatWindowView: View {
             HStack(spacing: 10) {
                 Image(systemName: "sparkles").foregroundStyle(.purple)
                 Text("Chat").font(.headline)
-                ModelChip(engine: engine)
+                ModelChip(engine: engine, onInstall: { actions.installModel($0) })
                 if let menu = hub.instructionsMenu { menu }
                 Spacer()
                 Button { copyChat() } label: { Image(systemName: "doc.on.doc") }

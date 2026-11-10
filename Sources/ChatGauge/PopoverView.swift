@@ -39,7 +39,7 @@ struct PopoverView: View {
     private var chatCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                ModelChip(engine: engine)
+                ModelChip(engine: engine, onInstall: { actions.installModel($0) })
                 StatusLine(engine: engine)
                 Spacer()
                 Button { engine.newChat() } label: { Image(systemName: "square.and.pencil") }

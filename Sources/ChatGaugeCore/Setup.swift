@@ -54,11 +54,9 @@ public struct ModelOption: Equatable, Sendable, Identifiable {
 
 public enum SetupCatalog {
     /// Download sizes from the Ollama library (rounded up a little).
-    public static let chat: [String: ModelOption] = [
-        "qwen2.5vl:3b": ModelOption(name: "qwen2.5vl:3b", bytes: 3_200_000_000, note: "Small and quick; fine on 8–16 GB Macs"),
-        "qwen2.5vl:7b": ModelOption(name: "qwen2.5vl:7b", bytes: 6_000_000_000, note: "The standard ChatGauge model (text and images)"),
-        "qwen2.5vl:32b": ModelOption(name: "qwen2.5vl:32b", bytes: 21_000_000_000, note: "Optional: slower, sharper answers; needs 48 GB or more"),
-    ]
+    public static let chat: [String: ModelOption] = Dictionary(uniqueKeysWithValues: ModelCatalog.standard.map { ($0.name, $0.option) })
+    /// Optional uncensored vision models (Install only; never auto-selected).
+    public static let uncensored: [String: ModelOption] = Dictionary(uniqueKeysWithValues: ModelCatalog.uncensored.map { ($0.name, $0.option) })
     /// whisper.cpp ggml model sizes (exact file sizes on Hugging Face, rounded).
     public static let whisper: [String: ModelOption] = [
         "tiny.en": ModelOption(name: "tiny.en", bytes: 77_700_000, note: "Fastest, least accurate"),
@@ -118,7 +116,7 @@ public struct SetupRecommendation: Equatable, Sendable {
 
     /// Space for the chosen models (+10% for Ollama's partial files).
     public static func neededBytes(chat: [String], whisper: String?) -> Int64 {
-        let c = chat.compactMap { SetupCatalog.chat[$0]?.bytes }.reduce(0, +)
+        let c = chat.compactMap { SetupCatalog.chat[$0]?.bytes ?? SetupCatalog.uncensored[$0]?.bytes }.reduce(0, +)
         let w = whisper.flatMap { SetupCatalog.whisper[$0]?.bytes } ?? 0
         return (c + w) + (c + w) / 10
     }

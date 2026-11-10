@@ -17,6 +17,8 @@ final class AppActions: ObservableObject {
     var quit: () -> Void = { NSApp.terminate(nil) }
     /// The first-run setup guide (also Settings › Model & Server › Run Setup Again…).
     var openSetup: () -> Void = {}
+    /// Install a catalog model (dry-run alert, then pull through the existing server).
+    var installModel: (String) -> Void = { _ in }
 }
 
 // MARK: Status
@@ -311,26 +313,46 @@ struct ImageDropModifier: ViewModifier {
 
 struct ModelChip: View {
     @ObservedObject var engine: ChatEngine
+    /// When set, Install… opens Settings / runs the given pull (popover and chat window pass this).
+    var onInstall: ((String) -> Void)? = nil
+
+    private var selected: String? { engine.conversation.model }
+    private var usingAutomatic: Bool { selected == nil }
+    private var rows: [ModelMenuRow] { ModelCatalog.menuRows(installed: engine.models) }
+
     var body: some View {
         Menu {
             Button {
-                engine.choose(model: .automatic)
+                engine.chooseForChat(.automatic)
             } label: {
-                Text(engine.settings.model == .automatic ? "✓ Automatic (\(engine.tier.rawValue.capitalized) tier)" : "Automatic (\(engine.tier.rawValue.capitalized) tier)")
+                Text((usingAutomatic ? "✓ " : "") + "Automatic (\(engine.tier.rawValue.capitalized) tier)")
             }
             Divider()
-            ForEach(engine.models) { m in
-                Button {
-                    engine.choose(model: .named(m.name))
-                } label: {
-                    let check = engine.settings.model.name == m.name ? "✓ " : ""
-                    let size = m.size > 0 ? " · \(MemoryStats.gb(m.size))" : ""
-                    Text("\(check)\(m.name)\(m.supportsVision ? " · vision" : "")\(size)")
+            ForEach(rows) { row in
+                if row.isInstalled {
+                    Button {
+                        engine.chooseForChat(.named(row.name))
+                    } label: {
+                        label(for: row, checked: selected == row.name || (usingAutomatic && engine.preferredModel == row.name && engine.settings.model.name == row.name))
+                    }
+                } else {
+                    Button {
+                        onInstall?(row.name)
+                    } label: {
+                        Text("\(row.name) — Install…")
+                            .foregroundStyle(.secondary)
+                    }
+                    .disabled(onInstall == nil || engine.isPulling)
                 }
             }
-            if engine.models.isEmpty { Text("No models installed").foregroundStyle(.secondary) }
+            if rows.isEmpty { Text("No models installed").foregroundStyle(.secondary) }
         } label: {
-            Text(engine.status.model ?? engine.preferredModel ?? "No model").font(.caption.weight(.medium)).lineLimit(1)
+            HStack(spacing: 4) {
+                Text(engine.status.model ?? engine.preferredModel ?? "No model").font(.caption.weight(.medium)).lineLimit(1)
+                if let m = engine.preferredModel, engine.models.first(where: { $0.name == m })?.supportsVision == true {
+                    Image(systemName: "eye").font(.caption2).foregroundStyle(.secondary)
+                }
+            }
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
@@ -338,7 +360,19 @@ struct ModelChip: View {
         .background(Color(nsColor: .controlBackgroundColor), in: Capsule())
         .overlay(Capsule().strokeBorder(Color.secondary.opacity(0.2)))
         .disabled(engine.isStreaming)
-        .help("Choose the model")
+        .help(engine.isStreaming ? "Wait for the reply to finish before changing models" : "Choose the model for this chat")
+    }
+
+    @ViewBuilder private func label(for row: ModelMenuRow, checked: Bool) -> some View {
+        let mark = checked ? "✓ " : ""
+        let vision = row.supportsVision ? " · vision" : ""
+        let size: String = {
+            if case .installed(let m, _) = row, m.size > 0 {
+                return " · " + MemoryStats.gb(m.size)
+            }
+            return ""
+        }()
+        Text(mark + row.name + vision + size + " — " + row.blurb)
     }
 }
 
