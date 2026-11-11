@@ -37,6 +37,7 @@ case "\$1" in
           ollama) cp "\$B/.fake-ollama" "\$B/ollama"; echo 0.40.11 > "\$B/.installed-ollama" ;;
           whisper-cpp) printf '#!/bin/sh\necho fake whisper-cli\n' > "\$B/whisper-cli"; echo 1.8.2 > "\$B/.installed-whisper-cpp" ;;
           ffmpeg) printf '#!/bin/sh\necho "ffmpeg version 8.0 fake"\n' > "\$B/ffmpeg"; echo 8.0 > "\$B/.installed-ffmpeg" ;;
+          uv) printf '#!/bin/sh\necho "fake uv; refusing real mflux install"\n' > "\$B/uv"; echo 0.8.0 > "\$B/.installed-uv" ;;
         esac
         chmod +x "\$B"/* 2>/dev/null; echo "🍺  \$f was installed (fake)" ;;
   *) echo "fake brew: \$*" ;;

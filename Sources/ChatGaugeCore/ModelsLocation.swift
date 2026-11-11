@@ -46,6 +46,12 @@ public struct ModelsLocation: Equatable, Sendable {
 
     /// ClipGauge's `ram-tiers.json`, read when present.
     public var ramTiersFile: URL { projectRoot.appendingPathComponent("config/ram-tiers.json") }
+
+    /// Optional mflux image models, on the same volume as the chat models, never inside the Ollama blobs folder.
+    public var imageModelsFolder: URL { projectRoot.appendingPathComponent("mflux-models", isDirectory: true) }
+
+    /// Generated images. Default: `ChatGauge Images` next to the models folder.
+    public var imagesFolder: URL { projectRoot.appendingPathComponent("ChatGauge Images", isDirectory: true) }
 }
 
 public enum ModelsAvailability: Equatable, Sendable {

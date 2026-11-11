@@ -69,7 +69,7 @@ struct SettingsView: View {
             Group {
                 switch router.tab {
                 case .instructions:
-                    ScrollView { InstructionsEditor(store: deps.instructions, location: deps.engine.location).padding(20) }
+                    ScrollView { InstructionsEditor(store: deps.instructions, location: deps.engine.location, models: deps.engine.models.map(\.name)).padding(20) }
                 default:
                     ScrollView {
                         VStack(alignment: .leading, spacing: 18) { page }
@@ -302,6 +302,43 @@ private struct ModelServerPane: View {
                 Text(msg).font(.caption).foregroundStyle(.secondary).padding(.top, 4)
             }
         }
+
+        PrefGroup(title: "Image generation",
+                  footer: ImageCatalog.suggestionLabel(memBytes: TierDetector.memBytes()) + " mflux is optional and is only installed after you confirm a dry run.") {
+            PrefRow(label: "mflux", detail: "MLX engine for Klein 4B and Z-Image Turbo. Not bundled in the app.") {
+                if engine.mfluxInstalled {
+                    Text("Installed").foregroundStyle(.secondary)
+                } else {
+                    Button("Install…") { confirmMflux() }
+                        .disabled(engine.imagePullTarget != nil)
+                }
+            }
+        }
+
+        PrefGroup(title: "Optional image models",
+                  footer: "Downloads go to the mflux-models folder on the models drive, never into Ollama. Each Install shows the size first. Generated images save to ChatGauge Images.") {
+            ForEach(Array(ImageCatalog.all.enumerated()), id: \.element.id) { i, e in
+                if i > 0 { Divider() }
+                let installed = engine.imageInstalled.contains(e.id)
+                PrefRow(label: e.title, detail: e.blurb) {
+                    HStack(spacing: 8) {
+                        if engine.imagePullTarget == e.id, let prog = engine.imagePullProgress {
+                            ProgressView(value: prog).frame(width: 80)
+                            Button("Cancel") { engine.cancelImageInstall() }
+                        } else if installed {
+                            Button("Remove…") { confirmRemoveImage(e) }
+                                .disabled(engine.imagePullTarget != nil || engine.isGeneratingImage)
+                        } else {
+                            Button("Install…") { confirmImageInstall(e) }
+                                .disabled(engine.imagePullTarget != nil || loc.availability() != .ready)
+                        }
+                    }
+                }
+            }
+            if let msg = engine.imagePullMessage {
+                Text(msg).font(.caption).foregroundStyle(.secondary).padding(.top, 4)
+            }
+        }
     }
 
     static var ramGB: Int { Int((Double(TierDetector.memBytes()) / 1_073_741_824).rounded()) }
@@ -376,6 +413,49 @@ private struct ModelServerPane: View {
         a.addButton(withTitle: "Remove")
         a.addButton(withTitle: "Cancel")
         if a.runModal() == .alertFirstButtonReturn { engine.removeModel(m.name, chatCount: count) }
+    }
+
+    private func confirmMflux() {
+        let a = NSAlert()
+        a.messageText = "Install mflux?"
+        a.informativeText = "This will run:\n\n" + MfluxInstall.plan(brew: "/opt/homebrew/bin/brew", uv: ChatEngine.which("uv")).joined(separator: "\n") + "\n\nNothing is installed until you click Install. ChatGauge does not compile mflux into the app."
+        a.addButton(withTitle: "Install")
+        a.addButton(withTitle: "Cancel")
+        if a.runModal() == .alertFirstButtonReturn {
+            engine.refreshImageModels()
+            if engine.mfluxInstalled {
+                engine.imagePullMessage = "mflux is already on this Mac."
+            } else if ProcessInfo.processInfo.environment["CHATGAUGE_UI_SELFTEST"] != nil {
+                engine.mfluxInstalled = true
+                engine.imagePullMessage = "mflux marked installed (self-test stub; nothing was downloaded)."
+            } else {
+                engine.imagePullMessage = "Use Install in the setup guide to run the dry-run uv install, or install mflux yourself and reopen Settings."
+            }
+        }
+    }
+
+    private func confirmImageInstall(_ e: ImageModelEntry) {
+        let a = NSAlert()
+        a.messageText = "Install \(e.title)?"
+        let lines = ImageCatalog.installPlan(e, into: loc.imageModelsFolder).joined(separator: "\n")
+        a.informativeText = "This will run:\n\n\(lines)\n\nAbout \(e.sizeLabel). Nothing downloads until you click Install."
+        a.addButton(withTitle: "Install")
+        a.addButton(withTitle: "Cancel")
+        if a.runModal() == .alertFirstButtonReturn { engine.installImageModel(e.id) }
+    }
+
+    private func confirmRemoveImage(_ e: ImageModelEntry) {
+        let plan = ImageRemoval.plan(e, folder: loc.imageModelsFolder)
+        let a = NSAlert()
+        a.messageText = "Remove \(e.title)?"
+        var info = "This frees about \(plan.freeLabel).\n\nThis will run:\n\n" + plan.lines.joined(separator: "\n")
+        if let w = plan.warning { info += "\n\n" + w }
+        a.informativeText = info
+        a.addButton(withTitle: "Remove")
+        a.addButton(withTitle: "Cancel")
+        if a.runModal() == .alertFirstButtonReturn {
+            engine.imagePullMessage = engine.removeImageModel(e.id)
+        }
     }
 }
 
@@ -629,6 +709,12 @@ struct ReleaseNote: Identifiable {
     var id: String { version }
 
     static let all: [ReleaseNote] = [
+        ReleaseNote(version: "0.1.0 (build 16, unreleased)", date: "November 2026", items: [
+            "Optional offline image generation with mflux: FLUX.2 Klein 4B, Z-Image Turbo, and an uncensored Klein 4B text encoder, each installed only after a dry run.",
+            "Generate image mode in the Chat Window, with a RAM-based model suggestion. Images save to a ChatGauge Images folder on the models drive.",
+            "Each chat model has its own instructions in Settings.",
+            "Import ClipGauge glossary is a one-time, read-only import that shows a dry run first.",
+        ]),
         ReleaseNote(version: "0.1.0", date: "October 2026", items: [
             "Chat with a local Ollama model from the menu bar, with images by drag, drop or paste.",
             "Picks a model by RAM tier and shows a clear loading state while it warms up.",

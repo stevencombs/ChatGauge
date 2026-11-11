@@ -18,6 +18,29 @@ final class ChatEngine: ObservableObject {
     @Published var conversation = Conversation()
     @Published var draft = ""
     @Published var attachments: [Attachment] = []
+    @Published var composerMode: ChatComposerMode = .chat
+    @Published var imageModelID: String = ImageCatalog.klein4b.id
+    @Published var imageProgress: Double? = nil
+    @Published var imageMessage: String? = nil
+    @Published var isGeneratingImage = false
+    @Published var imageInstalled: Set<String> = []
+    @Published var mfluxInstalled = false
+    @Published var imagePullTarget: String? = nil
+    @Published var imagePullProgress: Double? = nil
+    @Published var imagePullMessage: String? = nil
+    var imageDownloader: ImageDownloading = StubImageDownloader()
+    var imageExecutor: ImageExecuting = StubImageExecutor()
+    /// Tests and the self-test can point at a fake mflux path. Production leaves this nil.
+    var mfluxPathOverride: String? = nil
+    /// Self-test and unit tests point these at a scratch folder so nothing is written to a real models drive.
+    var imageModelsFolderOverride: URL? = nil
+    var imagesFolderOverride: URL? = nil
+    var imageModelsFolder: URL { imageModelsFolderOverride ?? location.imageModelsFolder }
+    var imagesOutputFolder: URL { imagesFolderOverride ?? location.imagesFolder }
+    /// Only true if a later live check confirms mflux can load the uncensored encoder. Default is false.
+    var uncensoredLoadable = false
+    var imageTask: Task<Void, Never>? = nil
+    var imageInstallTask: Task<Void, Never>? = nil
     /// One-off notes for the popover (Resolve open, memory low). Dismissable.
     @Published var banner: String?
     @Published private(set) var serverActionMessage: String?
@@ -29,7 +52,7 @@ final class ChatEngine: ObservableObject {
     private(set) var agents: [OllamaAgent] = []
 
     /// The system prompt for new requests (set by the instructions store).
-    var systemPrompt: () -> String? = { nil }
+    var systemPrompt: (String?) -> String? = { _ in nil }
     /// The active instructions preset's name (recorded on each chat).
     var instructionsName: () -> String? = { nil }
     /// Called whenever a reply finishes (the chat store saves).
@@ -276,11 +299,13 @@ final class ChatEngine: ObservableObject {
     // MARK: Chat
 
     var canSend: Bool {
-        !isStreaming && status.canChat
+        if composerMode == .image { return canSendImage }
+        return !isStreaming && !isGeneratingImage && status.canChat
             && (!draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty)
     }
 
     func send() {
+        if composerMode == .image { generateImage(); return }
         guard canSend, let client, let preferred = preferredModel else { return }
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         let images = attachments.map(\.data)
@@ -312,7 +337,7 @@ final class ChatEngine: ObservableObject {
         attachments = []
 
         let wasLoaded = isLoaded(model)
-        let wire = conversation.wire(system: systemPrompt())
+        let wire = conversation.wire(system: systemPrompt(conversation.model ?? preferred))
         isStreaming = true
         awaitingFirstToken = true
         lastReplySpeed = nil
@@ -400,7 +425,10 @@ final class ChatEngine: ObservableObject {
         }
     }
 
-    func stop() { streamer?.cancel() }
+    func stop() {
+        if isGeneratingImage { cancelImage(); return }
+        streamer?.cancel()
+    }
 
     func newChat() {
         if isStreaming { stop() }
@@ -409,6 +437,7 @@ final class ChatEngine: ObservableObject {
         draft = ""
         attachments = []
         banner = nil
+        imageMessage = nil
     }
 
     func open(_ c: Conversation) {

@@ -78,6 +78,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         installPasteMonitor()
         if settingsStore.settings.reopenLastChat && UISelfTest.outputFolder == nil { chats.reopenLast() }
         engine.start()
+        engine.refreshImageModels()
         if UISelfTest.outputFolder == nil && setupShouldAutoShow() { showSetup() }
         if let out = UISelfTest.outputFolder {
             UISelfTest.run(out: out, open: { [weak self] in self?.showPopover() },
@@ -87,7 +88,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
                                let c = await self?.selfTestChats(out: out) ?? ""
                                let setup = await self?.selfTestSetup(out: out) ?? ""
                                let b15 = await self?.selfTestBuild15(out: out) ?? ""
-                               return a + c + setup + b15
+                               let b16 = await self?.selfTestBuild16(out: out) ?? ""
+                               return a + c + setup + b15 + b16
                            })
         }
     }
@@ -173,13 +175,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
 
     private func configureInstructions() {
         let store = instructions
-        engine.systemPrompt = { store.file.systemPrompt() }
-        engine.instructionsName = { store.file.enabled ? store.file.active?.name : nil }
+        engine.systemPrompt = { model in store.file.systemPrompt(for: model) }
+        engine.instructionsName = { [weak engine] in store.file.enabled ? (engine?.conversation.model ?? "Default") : nil }
         hub.instructionsMenu = AnyView(PresetMenu(store: store) { [weak self] in self?.showInstructions() })
         let window = HostedWindow(title: "ChatGauge Instructions", size: NSSize(width: 640, height: 680), autosave: "ChatGaugeInstructions") { [weak self] in
             guard let self else { return AnyView(EmptyView()) }
             return AnyView(ScrollView {
-                InstructionsEditor(store: store, location: self.engine.location).padding(20)
+                InstructionsEditor(store: store, location: self.engine.location, models: self.engine.models.map(\.name)).padding(20)
             }.frame(minWidth: 600, minHeight: 600))
         }
         instructionsWindow = window

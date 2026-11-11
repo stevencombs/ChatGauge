@@ -60,12 +60,12 @@ final class InstructionsStore: ObservableObject {
 
     var activeIndex: Int? { draft.presets.firstIndex { $0.id == draft.activePresetID } ?? (draft.presets.isEmpty ? nil : 0) }
 
+    /// nil = the default instructions used when a model has no override.
+    @Published var selectedModel: String? = nil
+
     var standing: String {
-        get { activeIndex.map { draft.presets[$0].standing } ?? "" }
-        set {
-            guard let i = activeIndex else { return }
-            draft.presets[i].standing = String(newValue.prefix(InstructionLimits.standingChars))
-        }
+        get { draft.standing(for: selectedModel) }
+        set { draft.setStanding(newValue, for: selectedModel) }
     }
 
     var glossaryText: String {
@@ -96,21 +96,29 @@ final class InstructionsStore: ObservableObject {
         draft.activePresetID = draft.presets.first?.id
     }
 
-    /// One-time import of ClipGauge's glossary from <models parent>/config/custom-instructions.json.
-    func importFromClipGauge(location: ModelsLocation, includeStanding: Bool = false) {
+    /// Dry-run for the one-time, read-only ClipGauge glossary import (OT-100).
+    func glossaryImportPlan(location: ModelsLocation) -> ClipGaugeImport.Plan? {
         let src = location.clipGaugeInstructions
         guard let data = FileManager.default.contents(atPath: src.path) else {
             message = "No ClipGauge instructions found at \(src.path)."
-            return
+            return nil
         }
         guard let found = ClipGaugeImport.read(data) else {
             message = "ClipGauge's instructions have no glossary to import."
+            return nil
+        }
+        return ClipGaugeImport.plan(existing: draft.glossary, imported: found.glossary,
+                                    alreadyImported: draft.clipGaugeGlossaryImported, sourcePath: src.path)
+    }
+
+    func applyGlossaryImport(_ plan: ClipGaugeImport.Plan) {
+        let next = ClipGaugeImport.apply(draft, plan: plan)
+        if next == draft {
+            message = plan.alreadyImported ? "The ClipGauge glossary was already imported once." : "Nothing new to import."
             return
         }
-        let before = draft.glossary.count
-        draft.glossary = ClipGaugeImport.merge(draft.glossary, found.glossary)
-        if includeStanding, !found.standing.isEmpty, let i = activeIndex { draft.presets[i].standing = found.standing }
-        message = "Imported \(draft.glossary.count - before) new term(s) from ClipGauge. Click Save to keep them."
+        draft = next
+        message = "Imported \(plan.termsToAdd.count) new term(s) from ClipGauge. Click Save to keep them. ClipGauge's file was not changed."
     }
 
     static func clipGaugeAvailable(_ location: ModelsLocation) -> Bool {

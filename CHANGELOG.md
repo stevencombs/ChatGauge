@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — build 16
+
+- Optional offline image generation with mflux (installed only after a click and a dry run). Catalog: FLUX.2 Klein 4B (4.6 GB, Apache 2.0), Z-Image Turbo (5.9 GB, Apache 2.0), and an optional uncensored Klein 4B text encoder (8.0 GB; model card license flux-non-commercial-v2.1). mflux cannot load that encoder as-is; Generate Image will not silently fall back to the official encoder.
+- Generate image mode in the Chat Window, RAM-based model suggestion, and save to a ChatGauge Images folder on the models drive. ChatGauge never unloads an Ollama model it did not load.
+- Each installed chat model has its own instructions (OT-79), replacing the single shared preset as the system prompt.
+- Import ClipGauge glossary is a read-only, one-time import with a dry run first (OT-100).
+
+
 ## 0.1.0 — 2026-11-09
 
 First public release.

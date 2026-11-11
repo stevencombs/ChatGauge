@@ -147,9 +147,18 @@ struct ChatWindowView: View {
     private var detail: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
-                Image(systemName: "sparkles").foregroundStyle(.purple)
-                Text("Chat").font(.headline)
-                ModelChip(engine: engine, onInstall: { actions.installModel($0) })
+                Image(systemName: engine.composerMode == .image ? "photo" : "sparkles").foregroundStyle(.purple)
+                Picker("", selection: $engine.composerMode) {
+                    Text("Chat").tag(ChatComposerMode.chat)
+                    Text("Generate image").tag(ChatComposerMode.image)
+                }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 280)
+                if engine.composerMode == .chat {
+                    ModelChip(engine: engine, onInstall: { actions.installModel($0) })
+                } else {
+                    ImageModelChip(engine: engine)
+                }
                 if let menu = hub.instructionsMenu { menu }
                 Spacer()
                 Button { copyChat() } label: { Image(systemName: "doc.on.doc") }

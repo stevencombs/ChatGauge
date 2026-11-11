@@ -6,42 +6,35 @@ import SwiftUI
 struct InstructionsEditor: View {
     @ObservedObject var store: InstructionsStore
     var location: ModelsLocation
+    var models: [String] = []
     @ViewState private var showPreview = false
-    @ViewState private var naming: NameSheet?
-
-    enum NameSheet: Identifiable {
-        case new, rename
-        var id: Int { self == .new ? 0 : 1 }
-    }
+    @ViewState private var importPlan: ClipGaugeImport.Plan?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Preset").font(.headline)
+            Text("Instructions for each model").font(.headline)
             GroupBox {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Active preset")
-                        Text("Switch presets from the popover too").font(.caption).foregroundStyle(.secondary)
+                        Text("Model")
+                        Text("Each installed model has its own instructions, used for every chat on that model.").font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Picker("", selection: Binding(get: { store.draft.activePresetID ?? UUID() },
-                                                  set: { store.draft.activePresetID = $0 })) {
-                        ForEach(store.draft.presets) { p in Text(p.name).tag(p.id) }
+                    Picker("", selection: Binding(get: { store.selectedModel ?? "" },
+                                                  set: { store.selectedModel = $0.isEmpty ? nil : $0 })) {
+                        Text("Default (models without their own text)").tag("")
+                        ForEach(models, id: \.self) { name in
+                            Text(name).tag(name)
+                        }
                     }
-                    .labelsHidden().frame(width: 180)
-                    Button("New…") { naming = .new }
-                    Button("Rename") { naming = .rename }
-                    Button {
-                        store.deleteActive()
-                    } label: { Image(systemName: "trash") }
-                        .disabled(store.draft.presets.count <= 1).help("Delete this preset")
+                    .labelsHidden().frame(width: 260)
                 }
                 .padding(4)
             }
             HStack {
                 Toggle("Send instructions with every chat", isOn: Binding(get: { store.draft.enabled }, set: { store.draft.enabled = $0 }))
                 Spacer()
-                Text("Presets: " + store.draft.presets.map(\.name).joined(separator: " · ")).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                Text(store.draft.summary).font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
 
             Text("Standing instructions (system prompt)").font(.headline).padding(.top, 4)
@@ -53,7 +46,10 @@ struct InstructionsEditor: View {
                 .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
                 .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.secondary.opacity(0.25)))
             HStack {
-                Text("Sent as the system message on every chat that uses this preset.").font(.caption).foregroundStyle(.secondary)
+                Text(store.selectedModel == nil
+                     ? "Sent as the system message when a model has no instructions of its own."
+                     : "Sent as the system message on every chat that uses \(store.selectedModel ?? "").")
+                    .font(.caption).foregroundStyle(.secondary)
                 Spacer()
                 let n = store.standing.count
                 Text("\(n.formatted()) / \(InstructionLimits.standingChars.formatted())")
@@ -69,9 +65,11 @@ struct InstructionsEditor: View {
                         Text("One per line. Added to the instructions and to Whisper's prompt for voice input.").font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Button("Import from ClipGauge…") { store.importFromClipGauge(location: location) }
-                        .disabled(!InstructionsStore.clipGaugeAvailable(location))
-                        .help(InstructionsStore.clipGaugeAvailable(location) ? "Adds ClipGauge's glossary terms (ClipGauge's file is not changed)" : "No ClipGauge instructions found next to the models folder")
+                    Button("Import ClipGauge glossary…") {
+                        importPlan = store.glossaryImportPlan(location: location)
+                    }
+                    .disabled(!InstructionsStore.clipGaugeAvailable(location) || store.draft.clipGaugeGlossaryImported)
+                    .help(importHelp)
                 }
                 .padding(4)
             }
@@ -92,9 +90,9 @@ struct InstructionsEditor: View {
             HStack {
                 Button { showPreview = true } label: { Label("Preview Prompt", systemImage: "magnifyingglass") }
                 if let m = store.message {
-                    Label(m, systemImage: m == "Saved" ? "checkmark.circle.fill" : "info.circle")
+                    Label(m, systemImage: m.hasPrefix("Imported") || m == "Saved" ? "checkmark.circle.fill" : "info.circle")
                         .font(.callout)
-                        .foregroundStyle(m == "Saved" ? Palette.color(.ok) : .secondary)
+                        .foregroundStyle(m == "Saved" || m.hasPrefix("Imported") ? Palette.color(.ok) : .secondary)
                         .lineLimit(2)
                 }
                 Spacer()
@@ -104,26 +102,70 @@ struct InstructionsEditor: View {
             }
             .padding(.top, 4)
         }
-        .sheet(isPresented: $showPreview) { PromptPreview(file: store.draft.normalized()) }
-        .sheet(item: $naming) { kind in
-            NamePrompt(title: kind == .new ? "New preset" : "Rename preset",
-                       initial: kind == .new ? "" : (store.activeIndex.map { store.draft.presets[$0].name } ?? "")) { name in
-                if kind == .new { store.newPreset(named: name) } else { store.renameActive(to: name) }
-            }
+        .sheet(isPresented: $showPreview) {
+            PromptPreview(file: store.draft.normalized(), model: store.selectedModel)
+        }
+        .sheet(item: Binding(
+            get: { importPlan.map { ImportPlanSheet(plan: $0) } },
+            set: { importPlan = $0?.plan }
+        )) { sheet in
+            ImportDryRun(plan: sheet.plan, onImport: {
+                store.applyGlossaryImport(sheet.plan)
+                importPlan = nil
+            }, onCancel: { importPlan = nil })
         }
         .onChange(of: store.draft) { _, _ in if store.message == "Saved" { store.message = nil } }
+    }
+
+    private var importHelp: String {
+        if store.draft.clipGaugeGlossaryImported { return "The ClipGauge glossary was already imported once." }
+        if InstructionsStore.clipGaugeAvailable(location) { return "Shows a dry run first. ClipGauge's file is not changed." }
+        return "No ClipGauge instructions found next to the models folder"
+    }
+}
+
+private struct ImportPlanSheet: Identifiable {
+    var plan: ClipGaugeImport.Plan
+    var id: String { plan.sourcePath }
+}
+
+private struct ImportDryRun: View {
+    var plan: ClipGaugeImport.Plan
+    var onImport: () -> Void
+    var onCancel: () -> Void
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Import ClipGauge glossary?").font(.headline)
+            Text("This is a read-only, one-time import. Nothing is written to ClipGauge.").font(.caption).foregroundStyle(.secondary)
+            ForEach(plan.lines, id: \.self) { line in
+                Text(line).font(.system(.body, design: .monospaced)).textSelection(.enabled)
+            }
+            HStack {
+                Spacer()
+                Button("Cancel", action: onCancel).keyboardShortcut(.cancelAction)
+                Button("Import", action: onImport).keyboardShortcut(.defaultAction)
+                    .disabled(!plan.canApply)
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(16)
+        .frame(width: 520)
     }
 }
 
 struct PromptPreview: View {
     var file: InstructionsFile
+    var model: String? = nil
     @Environment(\.dismiss) private var dismiss
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("What ChatGauge sends").font(.headline)
-            Text("This is the system message at the start of every chat with “\(file.active?.name ?? "")”.").font(.caption).foregroundStyle(.secondary)
+            Text(model == nil
+                 ? "This is the system message for models that use the default instructions."
+                 : "This is the system message at the start of every chat with \(model ?? "").")
+                .font(.caption).foregroundStyle(.secondary)
             ScrollView {
-                Text(file.systemPrompt() ?? "(No system message: instructions are off or empty.)")
+                Text(file.systemPrompt(for: model) ?? "(No system message: instructions are off or empty.)")
                     .font(.system(.body, design: .monospaced)).textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading).padding(8)
             }
@@ -135,6 +177,27 @@ struct PromptPreview: View {
         }
         .padding(16)
         .frame(width: 520, height: 380)
+    }
+}
+
+/// The popover's instructions line opens the editor. Per-model text lives in Settings.
+struct PresetMenu: View {
+    @ObservedObject var store: InstructionsStore
+    var openEditor: () -> Void
+
+    var body: some View {
+        Menu {
+            Button(store.file.enabled ? "Instructions on" : "Instructions off") {
+                store.setEnabled(!store.file.enabled)
+            }
+            Button("Edit instructions…", action: openEditor)
+        } label: {
+            Image(systemName: "text.alignleft")
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(store.file.enabled ? "Instructions: per model" : "Instructions are off")
     }
 }
 
@@ -158,34 +221,11 @@ struct NamePrompt: View {
         .padding(16)
         .onAppear { name = initial }
     }
+
     private func done() {
-        let n = name.trimmingCharacters(in: .whitespaces)
+        let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !n.isEmpty else { return }
         onDone(n)
         dismiss()
-    }
-}
-
-/// The popover's instructions line becomes a quick preset switcher.
-struct PresetMenu: View {
-    @ObservedObject var store: InstructionsStore
-    var openEditor: () -> Void
-    var body: some View {
-        Menu {
-            ForEach(store.file.presets) { p in
-                Button((store.file.enabled && p.id == store.file.active?.id ? "✓ " : "") + p.name) {
-                    store.activate(p.id)
-                    if !store.file.enabled { store.setEnabled(true) }
-                }
-            }
-            Divider()
-            Button(store.file.enabled ? "Turn Instructions Off" : "Turn Instructions On") { store.setEnabled(!store.file.enabled) }
-            Button("Edit Instructions…", action: openEditor)
-        } label: {
-            Text("Instructions: \(store.file.summary)").font(.caption)
-        }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-        .help("Switch the instructions preset")
     }
 }

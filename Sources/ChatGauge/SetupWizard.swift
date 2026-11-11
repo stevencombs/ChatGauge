@@ -351,7 +351,18 @@ struct ToolsStep: View {
                     }
                 }
             }
-            if !model.log.isEmpty || model.installing != nil {
+            PrefGroup(title: "Image generation (optional)",
+                      footer: "mflux is installed only after you click Install and confirm the dry run. ChatGauge never bundles it in the app.") {
+                PrefRow(label: "mflux", detail: "MLX engine for FLUX.2 Klein 4B and Z-Image Turbo. macOS 14 or later.") {
+                    if model.mfluxInstalled {
+                        SetupStatusLine(ok: true, text: "Installed")
+                    } else {
+                        Button("Install…") { model.proposeMflux() }
+                            .disabled(model.brew.path == nil || model.installing != nil)
+                    }
+                }
+            }
+                        if !model.log.isEmpty || model.installing != nil {
                 PrefGroup(title: "Homebrew output", content: {
                     ScrollViewReader { proxy in
                         ScrollView {
@@ -399,7 +410,24 @@ struct ModelsStep: View {
                     }
                 }
             }
-            PrefGroup(title: "Voice model (whisper)", footer: "Saved in \(model.whisperFolder.path).") {
+            PrefGroup(title: "Optional image models",
+                      footer: model.imageSuggestion + " Each Install shows the size and the exact download. Nothing downloads until you confirm. Remove later from Settings. This does not use or change Ollama.") {
+                ForEach(Array(ImageCatalog.all.enumerated()), id: \.element.id) { i, e in
+                    if i > 0 { Divider() }
+                    HStack(spacing: 10) {
+                        JobView(name: e.title, detail: e.blurb, job: model.engine.imageInstalled.contains(e.id) ? .done("Installed") : (model.engine.imagePullTarget == e.id ? .running(model.engine.imagePullProgress, model.engine.imagePullMessage ?? "Installing…") : .idle))
+                        if model.engine.imagePullTarget == e.id {
+                            Button("Cancel") { model.engine.cancelImageInstall() }
+                        } else if model.engine.imageInstalled.contains(e.id) {
+                            Text("Installed").foregroundStyle(.secondary)
+                        } else {
+                            Button("Install…") { model.proposeImageModel(e.id) }
+                                .disabled(model.engine.imagePullTarget != nil)
+                        }
+                    }
+                }
+            }
+                        PrefGroup(title: "Voice model (whisper)", footer: "Saved in \(model.whisperFolder.path).") {
                 Toggle(isOn: Binding(get: { model.whisperPick != nil }, set: { model.whisperPick = $0 ? r.whisper.name : nil })) {
                     VStack(alignment: .leading, spacing: 1) {
                         Text("Voice input with \(r.whisper.name)")

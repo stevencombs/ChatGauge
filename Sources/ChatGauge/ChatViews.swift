@@ -226,9 +226,20 @@ struct ComposerView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             AttachmentChips(engine: engine)
+            if engine.composerMode == .image, let p = engine.imageProgress {
+                HStack {
+                    ProgressView(value: p).frame(maxWidth: 180)
+                    Text(engine.imageMessage ?? "Generating…").font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                }
+            } else if engine.composerMode == .image, let m = engine.imageMessage {
+                Text(m).font(.caption).foregroundStyle(.secondary)
+            }
             HStack(alignment: .bottom, spacing: 6) {
-                Button { if let attach { attach() } else { pickImages() } } label: { Image(systemName: "paperclip") }
-                    .buttonStyle(.borderless).help("Attach an image (or drop or paste one)")
+                if engine.composerMode == .chat {
+                    Button { if let attach { attach() } else { pickImages() } } label: { Image(systemName: "paperclip") }
+                        .buttonStyle(.borderless).help("Attach an image (or drop or paste one)")
+                }
                 TextField(placeholder, text: $engine.draft, axis: .vertical)
                     .textFieldStyle(.plain)
                     .lineLimit(1...6)
@@ -238,7 +249,7 @@ struct ComposerView: View {
                     .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
                     .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.secondary.opacity(0.25)))
                 if let voice { voice }
-                if engine.isStreaming {
+                if engine.isStreaming || engine.isGeneratingImage {
                     Button { engine.stop() } label: { Image(systemName: "stop.circle.fill").font(.title2) }
                         .buttonStyle(.borderless).help("Stop the reply")
                         .keyboardShortcut(".", modifiers: .command)
@@ -253,7 +264,11 @@ struct ComposerView: View {
     }
 
     private var placeholder: String {
-        engine.status.canChat ? "Message \(engine.status.model ?? "the model")…" : "Chat is paused: \(engine.status.title)"
+        if engine.composerMode == .image {
+            let name = ImageCatalog.entry(engine.imageModelID)?.title ?? "image model"
+            return "Describe the image to generate with \(name)…"
+        }
+        return engine.status.canChat ? "Message \(engine.status.model ?? "the model")…" : "Chat is paused: \(engine.status.title)"
     }
 
     private func pickImages() {
@@ -397,5 +412,27 @@ struct BannerView: View {
             .padding(8)
             .background(Palette.color(.busy).opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
         }
+    }
+}
+
+
+struct ImageModelChip: View {
+    @ObservedObject var engine: ChatEngine
+
+    var body: some View {
+        Menu {
+            ForEach(ImageCatalog.all) { e in
+                Button {
+                    engine.imageModelID = e.id
+                } label: {
+                    Text((engine.imageModelID == e.id ? "✓ " : "") + e.title + " — " + e.blurb)
+                }
+                .disabled(!engine.imageInstalled.contains(e.id) && e.kind == .model)
+            }
+        } label: {
+            let title = ImageCatalog.entry(engine.imageModelID)?.title ?? "Image model"
+            Text(title).font(.caption)
+        }
+        .help(ImageCatalog.suggestionLabel(memBytes: TierDetector.memBytes()))
     }
 }

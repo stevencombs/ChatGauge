@@ -146,6 +146,9 @@ final class SetupModel: ObservableObject {
 
     // Models
     @Published var chatPicks: Set<String> = []
+    @Published var uvPath: String?
+    @Published var mfluxInstalled = false
+    @Published var imageSuggestion: String = ""
     @Published var whisperPick: String?
     @Published private(set) var installedChat: [String] = []
     @Published private(set) var installedWhisper: [String] = []
@@ -269,6 +272,14 @@ final class SetupModel: ObservableObject {
     func rescanModels() {
         installedChat = ModelManifests.installed(in: folderURL)
         installedWhisper = WhisperModelPicker.installed(in: whisperFolder)
+        engine.refreshImageModels()
+        imageSuggestion = ImageCatalog.suggestionLabel(memBytes: memBytes)
+        if SetupEnv.isTest, ProcessInfo.processInfo.environment["CHATGAUGE_STUB_MFLUX"] != nil {
+            mfluxInstalled = true
+        } else {
+            mfluxInstalled = engine.mfluxInstalled
+        }
+        uvPath = SetupEnv.find("uv")
     }
 
     struct Gathered: Sendable {
@@ -388,6 +399,68 @@ final class SetupModel: ObservableObject {
         pending = PendingPlan(title: "Install \(t.title) with Homebrew", lines: SetupPlan.brewInstall(brew: b, tool: t),
                               note: "Homebrew downloads it from its own servers. This can take a few minutes.", runTitle: "Install") { [weak self] in
             self?.install(t, brew: b)
+        }
+    }
+
+    func proposeMflux() {
+        let lines = MfluxInstall.plan(brew: brew.path, uv: uvPath)
+        pending = PendingPlan(title: "Install mflux for image generation",
+                              lines: lines,
+                              note: "Optional. Nothing is installed until you click Install. mflux is a separate tool; ChatGauge does not compile it into the app.",
+                              runTitle: "Install") { [weak self] in
+            self?.installMflux()
+        }
+    }
+
+    private func installMflux() {
+        if SetupEnv.isTest {
+            mfluxInstalled = true
+            engine.mfluxInstalled = true
+            log += "✓ mflux marked installed (self-test stub; nothing was downloaded).\n"
+            return
+        }
+        installing = nil
+        let lines = MfluxInstall.plan(brew: brew.path, uv: uvPath)
+        log += "$ " + lines.joined(separator: "\n$ ") + "\n"
+        let p = LiveProcess()
+        brewProcess = p
+        Task {
+            if uvPath == nil, let b = brew.path {
+                let status = await p.run(b, ["install", "uv"], env: SetupEnv.environment()) { s in
+                    Task { @MainActor [weak self] in self?.appendLog(s) }
+                }
+                if status != 0 {
+                    appendLog("✗ brew install uv exited with status \(status).\n")
+                    brewProcess = nil
+                    return
+                }
+                uvPath = SetupEnv.find("uv")
+            }
+            guard let uv = uvPath ?? SetupEnv.find("uv") else {
+                appendLog("✗ uv isn't on the PATH.\n")
+                brewProcess = nil
+                return
+            }
+            let p2 = LiveProcess()
+            brewProcess = p2
+            let status = await p2.run(uv, ["tool", "install", "mflux"], env: SetupEnv.environment()) { s in
+                Task { @MainActor [weak self] in self?.appendLog(s) }
+            }
+            appendLog(status == 0 ? "✓ mflux installed.\n\n" : "✗ uv tool install mflux exited with status \(status).\n\n")
+            brewProcess = nil
+            runChecks()
+        }
+    }
+
+    func proposeImageModel(_ id: String) {
+        guard let entry = ImageCatalog.entry(id) else { return }
+        let folder = ModelsLocation(kind: store.settings.modelsLocation, path: folder).imageModelsFolder
+        let lines = ImageCatalog.installPlan(entry, into: folder)
+        pending = PendingPlan(title: "Install \(entry.title) (about \(entry.sizeLabel))",
+                              lines: lines,
+                              note: imageSuggestion + " Downloads only after you click Install. This does not use or change Ollama.",
+                              runTitle: "Install") { [weak self] in
+            self?.engine.installImageModel(id)
         }
     }
 

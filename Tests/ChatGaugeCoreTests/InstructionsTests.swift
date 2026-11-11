@@ -82,4 +82,47 @@ import Testing
         #expect(ClipGaugeImport.read(Data("x".utf8)) == nil)
         #expect(ClipGaugeImport.merge(["MEGA65"], ["mega65", "C64"]) == ["MEGA65", "C64"])
     }
+
+
+    @Test func perModelInstructionsReplaceSharedPreset() {
+        var f = InstructionsFile.standard
+        f.glossary = ["retroCombs"]
+        let fallback = f.systemPrompt(for: "qwen2.5vl:7b")
+        #expect(fallback?.hasPrefix("You are a helpful assistant") == true)
+        f.setStanding("Be a brief spec-sheet helper.", for: "qwen2.5vl:7b")
+        let own = f.systemPrompt(for: "qwen2.5vl:7b")
+        #expect(own?.hasPrefix("Be a brief spec-sheet helper.") == true)
+        #expect(own?.contains("retroCombs") == true)
+        #expect(f.systemPrompt(for: "qwen2.5vl:3b")?.hasPrefix("You are a helpful assistant") == true)
+        f.enabled = false
+        #expect(f.systemPrompt(for: "qwen2.5vl:7b") == nil)
+        #expect(f.summary == "Off")
+    }
+
+    @Test func schema1MigratesDefaultStanding() throws {
+        let raw = Data(#"{"app":"ChatGauge","schema":1,"presets":[{"id":"00000000-0000-0000-0000-000000000001","name":"Default","standing":"Hello from schema 1."}],"glossary":[],"enabled":true}"#.utf8)
+        let f = try InstructionsFile.decode(raw)
+        #expect(f.schema == 2)
+        #expect(f.defaultStanding == "Hello from schema 1.")
+        #expect(f.systemPrompt()?.contains("Hello from schema 1.") == true)
+    }
+
+    @Test func clipGaugeImportIsOneTimeReadOnlyDryRun() {
+        let src = "/Volumes/Models/config/custom-instructions.json"
+        let plan = ClipGaugeImport.plan(existing: ["MEGA65"], imported: ["MEGA65", "retroCombs", "TeensyROM"], alreadyImported: false, sourcePath: src)
+        #expect(plan.canApply)
+        #expect(plan.termsToAdd == ["retroCombs", "TeensyROM"])
+        #expect(plan.alreadyPresent == ["MEGA65"])
+        #expect(plan.lines.contains { $0.contains("not changed") })
+        #expect(plan.lines.contains { $0.contains("One-time") || $0.contains("one-time") })
+        var file = InstructionsFile.standard
+        file.glossary = ["MEGA65"]
+        let applied = ClipGaugeImport.apply(file, plan: plan)
+        #expect(applied.glossary.contains("retroCombs"))
+        #expect(applied.clipGaugeGlossaryImported)
+        let again = ClipGaugeImport.plan(existing: applied.glossary, imported: ["C64"], alreadyImported: true, sourcePath: src)
+        #expect(!again.canApply)
+        #expect(again.alreadyImported)
+        #expect(ClipGaugeImport.apply(applied, plan: again).glossary == applied.glossary)
+    }
 }
