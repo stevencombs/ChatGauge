@@ -13,8 +13,17 @@ import Testing
         #expect(ImageCatalog.kleinUncensoredEncoder.bytes == 8_056_410_867)
         #expect(ImageCatalog.kleinUncensoredEncoder.uncensored)
         #expect(ImageCatalog.kleinUncensoredEncoder.kind == .textEncoder)
-        #expect(ImageCatalog.all.count == 3)
+        #expect(ImageCatalog.known.count == 3)
+        #expect(ImageCatalog.all.count == 2)
+        #expect(!ImageCatalog.showUncensoredOption)
+        #expect(!ImageCatalog.all.contains(where: { $0.uncensored }))
+        #expect(!ImageCatalog.isVisible(ImageCatalog.kleinUncensoredEncoder.id))
         #expect(!ImageCatalog.standard.contains(where: { $0.uncensored }))
+    }
+
+    @Test func uncensoredOptionStaysInCodeButHiddenFromVisibleCatalog() {
+        #expect(ImageCatalog.entry(ImageCatalog.kleinUncensoredEncoder.id)?.repo == "ponpoke/flux2-klein-4b-uncensored-text-encoder")
+        #expect(ImageCatalog.all.map(\.id) == [ImageCatalog.klein4b.id, ImageCatalog.zImageTurbo.id])
     }
 
     @Test func ramSuggestionPrefersKlein() {

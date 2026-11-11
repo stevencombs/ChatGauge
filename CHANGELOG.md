@@ -1,11 +1,12 @@
 # Changelog
 
-## Unreleased — build 16
+## Unreleased — build 17
 
-- Optional offline image generation with mflux (installed only after a click and a dry run). Catalog: FLUX.2 Klein 4B (4.6 GB, Apache 2.0), Z-Image Turbo (5.9 GB, Apache 2.0), and an optional uncensored Klein 4B text encoder (8.0 GB; model card license flux-non-commercial-v2.1). mflux cannot load that encoder as-is; Generate Image will not silently fall back to the official encoder.
+- Optional offline image generation with mflux (installed only after a click and a dry run). Catalog shown in the app: FLUX.2 Klein 4B (4.6 GB, Apache 2.0) and Z-Image Turbo (5.9 GB, Apache 2.0).
 - Generate image mode in the Chat Window, RAM-based model suggestion, and save to a ChatGauge Images folder on the models drive. ChatGauge never unloads an Ollama model it did not load.
 - Each installed chat model has its own instructions (OT-79), replacing the single shared preset as the system prompt.
 - Import ClipGauge glossary is a read-only, one-time import with a dry run first (OT-100).
+- The uncensored Klein 4B text encoder remains in the codebase behind the internal flag `ImageCatalog.showUncensoredOption` (off) until official mflux can load it. It is hidden from the UI and is not mentioned in app help or What's New.
 
 
 ## 0.1.0 — 2026-11-09

@@ -453,7 +453,7 @@ final class SetupModel: ObservableObject {
     }
 
     func proposeImageModel(_ id: String) {
-        guard let entry = ImageCatalog.entry(id) else { return }
+        guard let entry = ImageCatalog.entry(id), ImageCatalog.isVisible(id) else { return }
         let folder = ModelsLocation(kind: store.settings.modelsLocation, path: folder).imageModelsFolder
         let lines = ImageCatalog.installPlan(entry, into: folder)
         pending = PendingPlan(title: "Install \(entry.title) (about \(entry.sizeLabel))",

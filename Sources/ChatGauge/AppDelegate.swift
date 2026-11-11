@@ -88,8 +88,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
                                let c = await self?.selfTestChats(out: out) ?? ""
                                let setup = await self?.selfTestSetup(out: out) ?? ""
                                let b15 = await self?.selfTestBuild15(out: out) ?? ""
-                               let b16 = await self?.selfTestBuild16(out: out) ?? ""
-                               return a + c + setup + b15 + b16
+                               let b17 = await self?.selfTestBuild17(out: out) ?? ""
+                               return a + c + setup + b15 + b17
                            })
         }
     }

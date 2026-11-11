@@ -709,8 +709,8 @@ struct ReleaseNote: Identifiable {
     var id: String { version }
 
     static let all: [ReleaseNote] = [
-        ReleaseNote(version: "0.1.0 (build 16, unreleased)", date: "November 2026", items: [
-            "Optional offline image generation with mflux: FLUX.2 Klein 4B, Z-Image Turbo, and an uncensored Klein 4B text encoder, each installed only after a dry run.",
+        ReleaseNote(version: "0.1.0 (build 17, unreleased)", date: "November 2026", items: [
+            "Optional offline image generation with mflux: FLUX.2 Klein 4B and Z-Image Turbo, each installed only after a dry run.",
             "Generate image mode in the Chat Window, with a RAM-based model suggestion. Images save to a ChatGauge Images folder on the models drive.",
             "Each chat model has its own instructions in Settings.",
             "Import ClipGauge glossary is a one-time, read-only import that shows a dry run first.",

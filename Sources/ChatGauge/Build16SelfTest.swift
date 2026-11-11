@@ -3,9 +3,9 @@ import ChatGaugeCore
 import SwiftUI
 
 extension AppDelegate {
-    /// Build 16: image models, generate-image mode, mflux dry run, OT-79 / OT-100. Never downloads mflux or models.
-    func selfTestBuild16(out: URL) async -> String {
-        var log = "== build16 image gen\n"
+    /// Build 17: image models (uncensored option hidden), generate-image mode, mflux dry run, OT-79 / OT-100.
+    func selfTestBuild17(out: URL) async -> String {
+        var log = "== build17 image gen\n"
         func check(_ ok: Bool, _ msg: String) { log += "   \(ok ? "PASS" : "FAIL") \(msg)\n" }
         func wait(_ s: Double) async { try? await Task.sleep(nanoseconds: UInt64(s * 1_000_000_000)) }
         func until(_ secs: Double, _ pred: () -> Bool) async -> Bool {
@@ -16,7 +16,7 @@ extension AppDelegate {
             }
             return pred()
         }
-        let dir = out.appendingPathComponent("build16", isDirectory: true)
+        let dir = out.appendingPathComponent("build17", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         func shot(_ name: String, view: NSView?) {
             log += UISelfTest.snapshot(name, view: view, engine: engine, out: dir)
@@ -33,11 +33,11 @@ extension AppDelegate {
         engine.mfluxInstalled = true
         engine.refreshImageModels()
 
+        check(!ImageCatalog.showUncensoredOption, "uncensored image option flag is off")
+        check(!ImageCatalog.all.contains(where: { $0.uncensored }), "visible catalog hides the uncensored image option")
         let install = ImageCatalog.installPlan(ImageCatalog.klein4b, into: engine.imageModelsFolder)
         check(install.contains { $0.contains("flux2-klein-4b-mflux-q4") }, "Klein 4B dry run names the q4 repo")
-        let un = ImageCatalog.installPlan(ImageCatalog.kleinUncensoredEncoder, into: engine.imageModelsFolder)
-        check(un.contains { $0.contains("ponpoke/flux2-klein-4b-uncensored-text-encoder") }, "uncensored dry run names ponpoke repo")
-        check(un.contains { $0.contains("will not silently use the official encoder") }, "uncensored dry run refuses silent fallback")
+        check(!install.contains { $0.lowercased().contains("uncensored") }, "Klein 4B dry run does not mention an uncensored option")
         let mflux = MfluxInstall.plan(brew: "/opt/homebrew/bin/brew", uv: nil)
         check(mflux.contains { $0.contains("install uv") }, "mflux dry run installs uv when missing")
         check(mflux.contains { $0.contains("tool install mflux") }, "mflux dry run is uv tool install mflux")
@@ -47,7 +47,7 @@ extension AppDelegate {
         engine.installImageModel(ImageCatalog.zImageTurbo.id)
         _ = await until(5) { engine.imageInstalled.contains(ImageCatalog.zImageTurbo.id) }
         engine.installImageModel(ImageCatalog.kleinUncensoredEncoder.id)
-        check(await until(5) { engine.imageInstalled.contains(ImageCatalog.kleinUncensoredEncoder.id) }, "stub install records uncensored encoder")
+        check(!engine.imageInstalled.contains(ImageCatalog.kleinUncensoredEncoder.id), "hidden uncensored option cannot be installed from the app")
 
         let before = engine.imageInstalled
         let msg = engine.removeImageModel(ImageCatalog.zImageTurbo.id)
@@ -64,12 +64,6 @@ extension AppDelegate {
         let genCmd = (engine.imageExecutor as? StubImageExecutor)?.lastCommand?.display ?? ""
         check(!genCmd.contains("ollama"), "generate does not call Ollama")
 
-        engine.imageModelID = ImageCatalog.kleinUncensoredEncoder.id
-        engine.draft = "a cat"
-        engine.generateImage()
-        check(engine.imageMessage?.contains("will not silently use the official encoder") == true,
-              "uncensored generate refuses to fall back")
-
         var f = InstructionsFile.standard
         f.setStanding("Be brief for the 7b model.", for: "qwen2.5vl:7b")
         check(f.systemPrompt(for: "qwen2.5vl:7b")?.contains("Be brief for the 7b model.") == true, "OT-79 per-model prompt")
@@ -82,9 +76,9 @@ extension AppDelegate {
 
         showSettings(tab: "model")
         await wait(0.6)
-        if let v = settingsWindow?.nsWindow?.contentView { shot("16-settings-image-models", view: v) }
+        if let v = settingsWindow?.nsWindow?.contentView { shot("17-settings-image-models", view: v) }
 
-        let host = NSHostingView(rootView: ImageInstallPreview(entry: ImageCatalog.kleinUncensoredEncoder, folder: engine.imageModelsFolder))
+        let host = NSHostingView(rootView: ImageInstallPreview(entry: ImageCatalog.klein4b, folder: engine.imageModelsFolder))
         host.frame = NSRect(x: 0, y: 0, width: 560, height: 360)
         let win = NSWindow(contentRect: host.frame, styleMask: [.titled, .closable], backing: .buffered, defer: false)
         win.title = "Install image model"
@@ -92,7 +86,7 @@ extension AppDelegate {
         win.contentView = host
         win.orderFront(nil)
         await wait(0.4)
-        shot("16-image-install-dry-run", view: host)
+        shot("17-image-install-dry-run", view: host)
         win.orderOut(nil)
         win.contentView = nil
 
@@ -105,17 +99,17 @@ extension AppDelegate {
         remWin.contentView = remHost
         remWin.orderFront(nil)
         await wait(0.4)
-        shot("16-image-remove-confirm", view: remHost)
+        shot("17-image-remove-confirm", view: remHost)
         remWin.orderOut(nil)
         remWin.contentView = nil
 
         showSettings(tab: "instructions")
         await wait(0.5)
-        if let v = settingsWindow?.nsWindow?.contentView { shot("16-settings-instructions", view: v) }
+        if let v = settingsWindow?.nsWindow?.contentView { shot("17-settings-instructions", view: v) }
 
         showChatWindow()
         await wait(0.6)
-        if let v = chatWindow?.nsWindow?.contentView { shot("16-generate-image-mode", view: v) }
+        if let v = chatWindow?.nsWindow?.contentView { shot("17-generate-image-mode", view: v) }
 
         showSetup()
         await wait(0.5)
@@ -124,13 +118,13 @@ extension AppDelegate {
             _ = await until(10) { m.checkedOnce && !m.checking }
             m.go(.tools)
             await wait(0.4)
-            if let v = setupWindow?.nsWindow?.contentView { shot("16-onboarding-mflux", view: v) }
+            if let v = setupWindow?.nsWindow?.contentView { shot("17-onboarding-mflux", view: v) }
             m.proposeMflux()
             check(m.pending?.lines.contains { $0.contains("tool install mflux") } == true, "onboarding mflux is click + dry run")
             m.pending = nil
             m.go(.models)
             await wait(0.4)
-            if let v = setupWindow?.nsWindow?.contentView { shot("16-onboarding-image-models", view: v) }
+            if let v = setupWindow?.nsWindow?.contentView { shot("17-onboarding-image-models", view: v) }
             m.proposeImageModel(ImageCatalog.klein4b.id)
             check(m.pending?.lines.contains { $0.contains("flux2-klein-4b-mflux-q4") } == true, "onboarding image install is a dry run")
             m.pending = nil

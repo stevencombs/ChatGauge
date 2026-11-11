@@ -96,7 +96,8 @@ extension ChatEngine {
     func generateImage() {
         guard composerMode == .image, canSendImage else { return }
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let entry = ImageCatalog.entry(imageModelID) else { return }
+        if !ImageCatalog.isVisible(imageModelID) { imageModelID = ImageCatalog.klein4b.id }
+        guard let entry = ImageCatalog.entry(imageModelID), ImageCatalog.isVisible(entry.id) else { return }
         switch location.availability() {
         case .driveMissing(let v):
             imageMessage = ImageGenerateError.driveMissing(v).description
@@ -193,7 +194,7 @@ extension ChatEngine {
     }
 
     func installImageModel(_ id: String) {
-        guard let entry = ImageCatalog.entry(id), imagePullTarget == nil else { return }
+        guard let entry = ImageCatalog.entry(id), ImageCatalog.isVisible(id), imagePullTarget == nil else { return }
         let folder = imageModelsFolder
         imagePullTarget = id
         imagePullProgress = 0
@@ -224,7 +225,7 @@ extension ChatEngine {
     }
 
     func removeImageModel(_ id: String) -> String? {
-        guard let entry = ImageCatalog.entry(id) else { return "Unknown model." }
+        guard let entry = ImageCatalog.entry(id), ImageCatalog.isVisible(id) else { return "Unknown model." }
         let dest = ImageCatalog.installDestination(entry, in: imageModelsFolder)
         do {
             if FileManager.default.fileExists(atPath: dest.path) {

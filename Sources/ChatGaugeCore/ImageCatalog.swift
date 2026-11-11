@@ -87,9 +87,16 @@ public enum ImageCatalog {
 
     public static var standard: [ImageModelEntry] { [klein4b, zImageTurbo] }
     public static var uncensored: [ImageModelEntry] { [kleinUncensoredEncoder] }
-    public static var all: [ImageModelEntry] { standard + uncensored }
+    /// Kept off until official mflux can load the community encoder. Flip to true to show it again in the UI.
+    public static let showUncensoredOption = false
+    /// Every known catalog entry, including the hidden uncensored encoder.
+    public static var known: [ImageModelEntry] { standard + uncensored }
+    /// Entries shown in Settings, onboarding, and Generate image mode.
+    public static var all: [ImageModelEntry] { showUncensoredOption ? known : standard }
 
-    public static func entry(_ id: String) -> ImageModelEntry? { all.first { $0.id == id } }
+    public static func entry(_ id: String) -> ImageModelEntry? { known.first { $0.id == id } }
+
+    public static func isVisible(_ id: String) -> Bool { all.contains { $0.id == id } }
 
     /// Default suggested model from `hw.memsize`. Klein 4B is the default on every tier in this build;
     /// Z-Image Turbo is offered more readily at 32 GB and up.
